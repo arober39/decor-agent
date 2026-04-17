@@ -2,7 +2,7 @@
 
 A production-grade LangGraph agent that gives confident, specific interior design advice. Built to demonstrate the LaunchDarkly AI iteration loop — AI Configs for runtime-managed prompts and models, progressive release, online evals, and observability.
 
-![Decor Agent landing page mockup](docs/hero.png)
+![Decor Agent landing page mockup](docs/decor-agent-chat-ui.png)
 
 ## What it does
 
