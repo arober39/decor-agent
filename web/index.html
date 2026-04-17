@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Decor Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/web/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="chat-shell" aria-label="Decor Agent chat">
+        <div class="shell-header">
+          <p class="eyebrow">Aldenaire &amp; Partners Inspired</p>
+          <h1>Design Chat</h1>
+          <p class="subcopy">
+            Ask for room styling, color palette ideas, furniture picks, or decor advice.
+          </p>
+        </div>
+
+        <div id="messages" class="messages" role="log" aria-live="polite"></div>
+
+        <form id="chat-form" class="composer">
+          <input
+            id="prompt"
+            name="message"
+            type="text"
+            placeholder="Describe your room or ask for inspiration..."
+            autocomplete="off"
+            required
+            maxlength="2000"
+          />
+          <button id="send" type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="/web/app.js" defer></script>
+  </body>
+</html>

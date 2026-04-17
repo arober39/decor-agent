@@ -1,0 +1,11 @@
+langgraph
+langgraph-checkpoint
+langchain-anthropic
+langchain-core
+anthropic
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+pydantic-settings
+structlog
