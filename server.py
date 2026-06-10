@@ -9,12 +9,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from typing import Literal
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.flags import build_context, get_flag, set_current_user_tier
 from app.graph import run_agent
 from app.logging import configure_logging, get_logger
 
@@ -26,6 +29,7 @@ log = get_logger(__name__)
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     context_key: str | None = None
+    user_tier: Literal["free", "premium"] | None = None
 
 
 class ChatResponse(BaseModel):
@@ -43,6 +47,13 @@ class HealthResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
+    # Initialize LaunchDarkly clients so runtime flag checks use live values.
+    try:
+        from app.flags import init_client
+
+        init_client()
+    except ImportError:
+        pass
     log.info("server.started", version=VERSION)
     try:
         yield
@@ -120,13 +131,31 @@ async def chat(req: ChatRequest) -> JSONResponse:
     message_id = str(uuid.uuid4())
     context_key = req.context_key or f"anon-{uuid.uuid4()}"
     timestamp = datetime.now(timezone.utc).isoformat()
+    set_current_user_tier(req.user_tier)
+    context = build_context(context_key)
 
     log.info(
         "chat.request",
         message_id=message_id,
         context_key=context_key,
+        user_tier=req.user_tier,
         message_len=len(req.message),
     )
+
+    if not get_flag("decor-agent-enabled", context, default=True):
+        log.info(
+            "chat.maintenance_mode",
+            message_id=message_id,
+            context_key=context_key,
+            flag_key="decor-agent-enabled",
+        )
+        body = ChatResponse(
+            response="Decor Agent is temporarily unavailable for maintenance. Check back soon!",
+            metadata={"routed_to": "maintenance"},
+            message_id=message_id,
+            timestamp=timestamp,
+        )
+        return JSONResponse(status_code=200, content=body.model_dump())
 
     try:
         result = run_agent(req.message, context_key=context_key)
