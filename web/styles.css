@@ -100,8 +100,32 @@ body {
 
 .composer {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto auto 1fr auto;
   gap: 10px;
+  align-items: center;
+}
+
+.composer .tier-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  letter-spacing: 0.02em;
+}
+
+.composer select {
+  border: 1px solid rgba(91, 58, 29, 0.2);
+  border-radius: 12px;
+  font: inherit;
+  padding: 12px 12px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-strong);
+  cursor: pointer;
+  outline: none;
+}
+
+.composer select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(156, 106, 48, 0.12);
 }
 
 .composer input {

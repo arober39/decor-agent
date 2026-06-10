@@ -9,3 +9,6 @@ python-dotenv
 pydantic
 pydantic-settings
 structlog
+requests
+launchdarkly-server-sdk
+launchdarkly-server-sdk-ai

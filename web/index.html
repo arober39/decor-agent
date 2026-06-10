@@ -26,6 +26,11 @@
         <div id="messages" class="messages" role="log" aria-live="polite"></div>
 
         <form id="chat-form" class="composer">
+          <label for="tier" class="tier-label">Tier</label>
+          <select id="tier" name="tier">
+            <option value="free" selected>Free</option>
+            <option value="premium">Premium</option>
+          </select>
           <input
             id="prompt"
             name="message"

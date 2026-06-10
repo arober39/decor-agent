@@ -1,5 +1,6 @@
 const form = document.getElementById("chat-form");
 const promptInput = document.getElementById("prompt");
+const tierSelect = document.getElementById("tier");
 const sendButton = document.getElementById("send");
 const messages = document.getElementById("messages");
 
@@ -34,6 +35,7 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         message,
         context_key: contextKey,
+        user_tier: tierSelect.value,
       }),
     });
 
