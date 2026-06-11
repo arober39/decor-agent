@@ -154,12 +154,49 @@ python -m pytest test_workflow.py -v      # 6 passed
 
 ---
 
+## Security posture
+
+Temporal is a durable‑execution platform, **not** a security layer — but "Temporalizing" an app *changes its security surface*, so this is a deliberate part of the design.
+
+**The key fact:** Temporal records every workflow input, activity input/output, signal payload, and result in the **Event History**, persisted in the Service's database and visible in the Web UI. Anything passing through a workflow or activity is therefore **stored at rest**.
+
+What this app does, mapped to the standard Temporal practices:
+
+| Practice | How it's handled |
+|---|---|
+| **Secrets never in workflow inputs** | ✅ The `ANTHROPIC_API_KEY` is read **inside activities** (`get_settings()` → `get_llm`), never passed as a workflow arg. Workflow args are only `[message, budget, context_key, max_input_length]` — no secrets reach event history. |
+| **Encryption at rest** | ✅ A custom **AES‑256‑GCM payload codec** (`app/codec.py`) sits in the data converter and encrypts every payload **client‑side** before it leaves the worker/server. The Service only ever stores ciphertext. This directly closes the PII gap below. |
+| **Activities as the security boundary** | ✅ Every external call (Claude, LaunchDarkly) lives in an activity — input validation, credentials, and egress all sit at that boundary. |
+| **Replay‑safe logging** | ✅ Activities use `activity.logger`; the workflow logs no secrets. |
+| **Errors don't leak internals** | ✅ The `/api/temporal/*` handlers log `str(exc)` server‑side and return a generic `{"detail": ...}` to the client. |
+
+**The PII consideration this app specifically raises:** the `input_guard` *detects* PII (email/phone/SSN) but deliberately **does not block** it — so a user message containing PII becomes the workflow input. Without encryption that PII would sit in event history in plaintext. The payload codec is the fix: with `ENCRYPTION_KEY` set, that message is ciphertext at rest.
+
+### Using the codec
+
+```bash
+# generate a 32-byte key and add it to .env (gitignored)
+python3 -c "import os,base64; print(base64.b64encode(os.urandom(32)).decode())"
+# ENCRYPTION_KEY=<paste>
+```
+
+Restart the worker + server. The worker logs `encryption=True`; in the Web UI the input/result payloads now show as `binary/encrypted` base64 ciphertext instead of readable text. Toggle by removing `ENCRYPTION_KEY` and restarting. The time‑skipping tests use their own environment with no codec, so they stay green and unencrypted.
+
+**Operational caveats (worth naming):**
+- The Web UI/CLI can't decrypt without the key — viewing decrypted payloads in the UI requires running a **codec server**, out of scope here.
+- **Key rotation:** starting a workflow with one key then restarting with a different/absent key breaks that workflow's replay. Finish or terminate in‑flight workflows before rotating.
+
+**Consciously deferred (local‑demo scope, production hardening):** mTLS between workers and the Service (mandatory on Temporal Cloud), namespace isolation per environment/tenant, and authn/authz on the `/api/temporal/*` endpoints.
+
+---
+
 ## File map (Temporal additions)
 
 ```
 app/workflow.py     # DecorAgentWorkflow — deterministic orchestration, signals, query
 app/activities.py   # @activity.defn functions — all LLM / side-effecting work
 app/worker.py       # Worker process: registers workflow + activities on "decor-agent"
+app/codec.py        # AES-256-GCM payload codec — encryption at rest (event history)
 server.py           # /api/temporal/* endpoints (start, signal, snapshot, result)
 web/temporal.html   # "Decor Agent (Pro)" UI — durable chat + whole-home approval
 web/temporal.js     # snapshot polling, decision signals, live status widget

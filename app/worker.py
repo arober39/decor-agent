@@ -14,6 +14,7 @@ from temporalio.worker import Worker
 from app.activities import (
     agent_turn, run_tool, extract_rooms, plan_room, build_shopping_list,
 )
+from app.codec import data_converter, get_codec
 from app.logging import configure_logging, get_logger
 from app.workflow import DecorAgentWorkflow
 
@@ -30,8 +31,11 @@ async def main() -> None:
     except ImportError:
         pass
 
-    client = await Client.connect("localhost:7233")
-    log.info("worker.starting", task_queue=TASK_QUEUE)
+    # Same data converter as the FastAPI client — encrypts payloads at rest when
+    # ENCRYPTION_KEY is set, so event history holds ciphertext (see app/codec.py).
+    client = await Client.connect("localhost:7233", data_converter=data_converter())
+    log.info("worker.starting", task_queue=TASK_QUEUE,
+             encryption=get_codec() is not None)
     # Sync (blocking) activities need an executor; max_workers caps how many
     # activities run concurrently — large enough to cover the per-room fan-out.
     with ThreadPoolExecutor(max_workers=10) as activity_executor:
