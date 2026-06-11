@@ -60,12 +60,36 @@ const finalOutput = document.getElementById("final-output");
 
 let currentWorkflowId = null;
 let pollTimer = null;
+let decisionSubmitted = false;   // a decision button was clicked, awaiting the phase change
+let pendingLabel = null;         // optimistic widget label until the phase advances
+let snapshotFailures = 0;        // consecutive failed snapshot polls (stale tab / reset server)
+
+function setPlanWidget(label) {
+  if (label) {
+    planThinkingText.textContent = label;
+    planThinkingText.setAttribute("data-text", label);
+    planThinking.classList.remove("hidden");
+  } else {
+    planThinking.classList.add("hidden");
+  }
+}
+
+function stopPolling(message) {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  setPlanWidget(null);
+  draftBlock.classList.add("hidden");
+  phaseBadge.textContent = "unavailable";
+  if (message) roomProgress.textContent = message;
+}
 
 function resetBlocks() {
   statusBlock.classList.remove("hidden");
   draftBlock.classList.add("hidden");
   finalBlock.classList.add("hidden");
   planThinking.classList.add("hidden");
+  decisionSubmitted = false;
+  pendingLabel = null;
+  snapshotFailures = 0;
   draftPlans.innerHTML = "";
   finalOutput.textContent = "";
   roomProgress.innerHTML = "";
@@ -74,17 +98,22 @@ function resetBlocks() {
 function renderSnapshot(snap) {
   phaseBadge.textContent = (snap.phase || "").replace(/_/g, " ");
 
-  // show the loading widget while the workflow is actively planning (also
-  // reappears during a budget re-plan); hide once it parks or finishes.
-  const busy = !["awaiting_decision", "completed", "rejected"].includes(snap.phase);
-  planThinking.classList.toggle("hidden", !busy);
+  // Once the workflow advances past the decision point, drop the optimistic
+  // state we set when the user clicked a decision button.
+  if (snap.phase !== "awaiting_decision") decisionSubmitted = false;
 
-  // after approval the workflow builds the shopping list — reflect that.
-  const planLabel = snap.phase === "building_list"
-    ? "Locking in your designs"
-    : "Designing your space";
-  planThinkingText.textContent = planLabel;
-  planThinkingText.setAttribute("data-text", planLabel);
+  // Loading widget. While a decision is in flight (button clicked but the
+  // snapshot still reports "awaiting_decision"), keep the optimistic label so
+  // the widget doesn't flicker back to the draft. build_shopping_list can
+  // finish between 1s polls, so we can't rely on observing "building_list".
+  if (decisionSubmitted && snap.phase === "awaiting_decision") {
+    setPlanWidget(pendingLabel);            // null => stays hidden (reject)
+  } else {
+    const busy = !["awaiting_decision", "completed", "rejected"].includes(snap.phase);
+    setPlanWidget(busy
+      ? (snap.phase === "building_list" ? "Locking in your designs" : "Designing your space")
+      : null);
+  }
 
   // per-room progress chips
   if (snap.rooms_total > 0) {
@@ -107,7 +136,7 @@ function renderSnapshot(snap) {
   }
 
   // draft + decision buttons once awaiting decision
-  if (snap.phase === "awaiting_decision" && (snap.draft_plans || []).length) {
+  if (snap.phase === "awaiting_decision" && !decisionSubmitted && (snap.draft_plans || []).length) {
     draftBlock.classList.remove("hidden");
     draftPlans.innerHTML = "";
     snap.draft_plans.forEach((p) => {
@@ -127,6 +156,14 @@ async function poll() {
   if (!currentWorkflowId) return;
   try {
     const res = await fetch(`/api/temporal/plan/${currentWorkflowId}/snapshot`);
+    if (!res.ok) {
+      // workflow not found (stale tab / dev server reset) — give up after a few tries
+      if (++snapshotFailures >= 3) {
+        stopPolling("This plan is no longer available — start a new one.");
+      }
+      return;
+    }
+    snapshotFailures = 0;
     const snap = await res.json();
     renderSnapshot(snap);
 
@@ -136,7 +173,7 @@ async function poll() {
       await showResult();
     }
   } catch (e) {
-    // transient; keep polling
+    // transient network error; keep polling
   }
 }
 
@@ -156,9 +193,7 @@ async function showResult() {
 planStart.addEventListener("click", async () => {
   resetBlocks();
   // show the widget right away, before the first snapshot poll arrives
-  planThinkingText.textContent = "Designing your space";
-  planThinkingText.setAttribute("data-text", "Designing your space");
-  planThinking.classList.remove("hidden");
+  setPlanWidget("Designing your space");
   planStart.disabled = true;
   planStart.textContent = "Starting...";
   try {
@@ -187,6 +222,15 @@ planStart.addEventListener("click", async () => {
 });
 
 async function sendDecision(decision, newBudget) {
+  // Optimistically reflect the decision right away — the next phase is brief
+  // (build_shopping_list can finish between 1s polls), so don't wait for one.
+  decisionSubmitted = true;
+  pendingLabel = decision === "approve" ? "Locking in your designs"
+    : decision === "tweak_budget" ? "Designing your space"
+    : null;                                  // reject -> no widget
+  draftBlock.classList.add("hidden");
+  setPlanWidget(pendingLabel);
+
   const body = { decision };
   if (newBudget) body.new_budget = newBudget;
   await fetch(`/api/temporal/plan/${currentWorkflowId}/decision`, {
