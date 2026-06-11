@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     ld_project_name: str = Field(default="", validation_alias="LAUNCHDARKLY_PROJECT_NAME")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     environment: str = Field(default="development", validation_alias="ENVIRONMENT")
+    # base64 32-byte key; when set, Temporal payloads are encrypted at rest (app/codec.py)
+    encryption_key: str = Field(default="", validation_alias="ENCRYPTION_KEY")
 
     default_model: str = "claude-sonnet-4-20250514"
     fallback_model: str = "claude-3-5-sonnet-20241022"

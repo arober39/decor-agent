@@ -181,7 +181,7 @@ async with await WorkflowEnvironment.start_time_skipping() as env:
 
 ## 6. Why the Temporalized version wins (1 min)
 
-- **Crash‑proof** — kill the worker mid‑plan, restart, it resumes. (Live demo, section 7.)
+- **Crash‑proof** — kill the worker mid‑plan, restart, it resumes. (Live demo, section 8.)
 - **Reliability is declarative** — `RetryPolicy` + timeouts replaced my `error_handler` node.
 - **Long waits are free** — human approval needs no DB flag, no poller.
 - **Concurrency is one line** — fan‑out via `gather`, partial failures retried independently.
@@ -191,7 +191,34 @@ async with await WorkflowEnvironment.start_time_skipping() as env:
 
 ---
 
-## 7. Live demo (1–2 min)
+## 7. Security: what Temporalizing changed (1 min)
+
+> **"Temporal isn't a security product — it's durable execution. But making something durable means it's now *written down*, and that changes your security story."**
+
+- **The fact:** every workflow input, activity result, and signal is persisted in **Event History** and shown in the Web UI. Durability means your data is stored at rest.
+- **Secrets — handled by construction.** My `ANTHROPIC_API_KEY` is read **inside an activity**, never passed as a workflow arg, so it never lands in history.
+- **The PII gotcha — and the fix.** My `input_guard` *detects* PII but passes it through, so a user's email/SSN becomes the workflow input — plaintext in history. I close that with a **payload codec** (`app/codec.py`): AES‑256‑GCM that encrypts every payload **client‑side** before it reaches the server. The server literally can't read your data.
+
+```python
+# app/codec.py — runs in the data converter; the server only ever stores ciphertext.
+class EncryptionCodec(PayloadCodec):
+    async def encode(self, payloads):            # encrypt on the way out
+        out = []
+        for p in payloads:
+            nonce = os.urandom(12)
+            ct = self._aead.encrypt(nonce, p.SerializeToString(), None)
+            out.append(Payload(metadata={"encoding": b"binary/encrypted"},
+                               data=nonce + ct))
+        return out
+```
+
+> **Demo beat:** flip `ENCRYPTION_KEY` on/off, restart, and show the *same* payload as `binary/encrypted` ciphertext vs. readable plaintext in the Web UI.
+
+**Honestly scoped out** (production hardening, not a local‑demo concern): mTLS worker↔service, namespace isolation per environment, and auth on the API endpoints. And one real caveat to name: encrypted payloads mean the Web UI needs a **codec server** to show plaintext, and rotating the key mid‑flight breaks replay.
+
+---
+
+## 8. Live demo (1–2 min)
 
 1. Start a whole‑home plan → watch it fan out, then **park** for approval (Web UI shows *Running*).
 2. **Ctrl‑C the worker.** Workflow is untouched in the service.
@@ -201,7 +228,7 @@ async with await WorkflowEnvironment.start_time_skipping() as env:
 
 ---
 
-## 8. How I'd teach this to developers (close, 30 sec)
+## 9. How I'd teach this to developers (close, 30 sec)
 
 > **"Start from the pain they already feel — the retry loop and the DB state machine they've written ten times. Give them the recipe/cooking split as the one mental model. Then show, don't tell: kill the worker live. Durability you can *watch* recover is worth a hundred slides."**
 

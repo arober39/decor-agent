@@ -63,9 +63,11 @@ class DecisionRequest(BaseModel):
     new_budget: str | None = None
 
 async def _temporal_client():
-    """Lazy import + connect so the app still boots if Temporal isn't running."""
+    """Lazy import + connect so the app still boots if Temporal isn't running.
+    Uses the same encryption codec as the worker so payloads round-trip."""
     from temporalio.client import Client
-    return await Client.connect("localhost:7233")
+    from app.codec import data_converter
+    return await Client.connect("localhost:7233", data_converter=data_converter())
 
 
 @asynccontextmanager
