@@ -39,8 +39,8 @@ body {
 .chat-shell {
   width: min(860px, 100%);
   min-height: min(85vh, 760px);
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   gap: 18px;
   background: var(--bg-panel);
   border: 1px solid var(--bg-panel-border);
@@ -71,6 +71,8 @@ body {
 }
 
 .messages {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
