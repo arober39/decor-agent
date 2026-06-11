@@ -2,6 +2,8 @@
 
 A production-grade LangGraph agent that gives confident, specific interior design advice. Built to demonstrate the LaunchDarkly AI iteration loop — AI Configs for runtime-managed prompts and models, progressive release, online evals, and observability.
 
+> **🌀 Temporal version:** this project has been "Temporalized" — the same agent re-expressed as a durable, retryable, human-in-the-loop Temporal workflow. See **[TEMPORAL.md](TEMPORAL.md)** for the before/after architecture and runbook, and **[docs/TALK.md](docs/TALK.md)** for the presentation walkthrough.
+
 ![Decor Agent landing page mockup](docs/decor-agent-chat-ui.png)
 
 ## What it does
@@ -17,6 +19,13 @@ Example questions:
 - "Hello!" → direct response, no tool call
 
 ## Architecture
+
+This repo ships **two** implementations of the same agent that run side-by-side:
+
+- **Before — LangGraph** (`/api/chat`, the `/` UI): an in-process state machine. Described below.
+- **After — Temporal** (`/api/temporal/*`, the `/temporal` UI): the same domain logic re-expressed as a durable, retryable, human-in-the-loop workflow. **See [TEMPORAL.md](TEMPORAL.md)** for the full Temporal architecture, the worker/workflow/activity breakdown, and the runbook.
+
+### Before: the LangGraph graph
 
 ```
 START
@@ -38,6 +47,18 @@ END
 
 Each node is a checkpoint boundary, so a failure in `execute_tools` resumes from there on retry, not from the start.
 
+### After: the Temporal application
+
+```
+client → Temporal Service (:7233, persists Event History)
+              ↓  task queue "decor-agent"
+         Worker (app/worker.py) hosts:
+           • DecorAgentWorkflow   — deterministic orchestration (signals, query, durable wait, fan-out)
+           • activities           — all LLM / side-effecting work, run in a ThreadPoolExecutor
+```
+
+The workflow is pure/deterministic; every side effect is an activity. Human approval is a durable `wait_condition` driven by `approve`/`reject`/`tweak_budget` **signals**, and a `snapshot` **query** powers the live status UI. Full detail in [TEMPORAL.md](TEMPORAL.md).
+
 ## Project layout
 
 ```
@@ -47,22 +68,37 @@ decor-agent/
 │   ├── logging.py             # structlog (JSON prod / console dev)
 │   ├── state.py               # AgentState + metadata merge reducer
 │   ├── prompts.py             # Four structured system prompts
-│   ├── flags.py               # LaunchDarkly integration (pending)
+│   ├── flags.py               # LaunchDarkly AI Configs integration
+│   ├── llm.py                 # Claude client factory (shared by both versions)
+│   │
+│   │   # --- before: LangGraph ---
 │   ├── graph.py               # Graph definition + run_agent()
 │   ├── nodes/
 │   │   ├── input_guard.py
 │   │   ├── agent.py
 │   │   ├── error_handler.py
 │   │   └── response_formatter.py
-│   └── tools/
-│       ├── style_advisor.py
-│       ├── room_planner.py
-│       └── trend_spotter.py
-├── server.py                  # FastAPI — /api/chat, /api/health, static /web
-├── test_agent.py              # 13-case end-to-end suite
-├── generate_traffic.py        # Load generator (pending)
-├── web/                       # Static frontend
-├── docs/                      # README assets
+│   ├── tools/
+│   │   ├── style_advisor.py
+│   │   ├── room_planner.py
+│   │   └── trend_spotter.py
+│   │
+│   │   # --- after: Temporal ---
+│   ├── workflow.py            # DecorAgentWorkflow — deterministic orchestration, signals, query
+│   ├── activities.py          # @activity.defn functions — all LLM / side-effecting work
+│   └── worker.py              # Worker process: registers workflow + activities (task queue "decor-agent")
+│
+├── server.py                  # FastAPI — /api/chat (before), /api/temporal/* (after), static /web
+├── test_agent.py              # LangGraph end-to-end suite
+├── test_workflow.py           # Temporal workflow tests (time-skipping, mocked activities)
+├── generate_traffic.py        # Load generator
+├── web/
+│   ├── index.html / app.js    # "before" chat UI  (/)
+│   └── temporal.html / temporal.js  # "after" durable UI  (/temporal)
+├── TEMPORAL.md                # before/after architecture + Temporal runbook
+├── docs/
+│   ├── TALK.md                # presentation talking points
+│   └── *.png                  # README assets
 ├── requirements.txt
 └── .env.example
 ```
@@ -84,20 +120,29 @@ curl -X POST http://localhost:8000/api/chat \
   -d '{"message": "What color goes with walnut floors?"}'
 ```
 
+### Running the Temporal version
+
+The Temporal "after" needs two more processes (the dev server and a worker). Full runbook — including the crash/durability demo — is in **[TEMPORAL.md](TEMPORAL.md)**. Short version:
+
+```bash
+temporal server start-dev          # terminal 1 — dev server + Web UI (:8233)
+python -m app.worker               # terminal 2 — hosts workflow + activities
+python server.py                   # terminal 3 — API + /temporal UI
+```
+
 ## Run the test suite
 
 ```bash
-LOG_LEVEL=WARNING python test_agent.py
+LOG_LEVEL=WARNING python test_agent.py     # LangGraph (before)
+python -m pytest test_workflow.py -v       # Temporal workflow (after) — no API key / server needed
 ```
-
-Current status: **13 / 13 passing** across routing, guard, off-topic, and edge cases.
 
 ## Environment
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | _required_ | Claude API key |
-| `LD_SDK_KEY` | `""` | LaunchDarkly server SDK key (used once `flags.py` is wired) |
+| `LD_SDK_KEY` | `""` | LaunchDarkly server SDK key (used by `flags.py` AI Configs) |
 | `LOG_LEVEL` | `INFO` | structlog level |
 | `ENVIRONMENT` | `development` | Switches log format between console and JSON |
 
@@ -112,10 +157,8 @@ Current status: **13 / 13 passing** across routing, guard, off-topic, and edge c
 
 ## Tech stack
 
-Python 3.12 · LangGraph · LangChain · Anthropic Claude Sonnet 4 · FastAPI · Pydantic · structlog · LaunchDarkly (server SDK + AI SDK, pending)
+Python 3.12+ · LangGraph · LangChain · Anthropic Claude · **Temporal (Python SDK)** · FastAPI · Pydantic · structlog · LaunchDarkly (server SDK + AI SDK)
 
-## What's deferred
+## Notes & trade-offs
 
-- `app/flags.py` — LaunchDarkly SDK + AI Configs integration (model, prompt, params managed at runtime via flags)
-- `generate_traffic.py` — load generator to produce monitoring data for LD dashboards
-- **Cached LLM client factory** — lands with the AI Configs work, since the cache key depends on flag-controlled fields
+The Temporal version makes a few deliberate design choices (sync activities + thread-pool executor for the blocking LLM calls; no `heartbeat_timeout`/handler-drain, with reasons) — these are documented in the **[TEMPORAL.md](TEMPORAL.md)** "Sync activities" and "Design decisions & trade-offs" sections.

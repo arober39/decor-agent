@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", validation_alias="ENVIRONMENT")
 
     default_model: str = "claude-sonnet-4-20250514"
+    fallback_model: str = "claude-3-5-sonnet-20241022"
     max_tokens: int = 1024
     max_input_length: int = 2000
     max_retries: int = 2
