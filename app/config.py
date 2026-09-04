@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     anthropic_api_key: str = Field(validation_alias="ANTHROPIC_API_KEY")
+    # Required when ANTHROPIC_API_KEY is an identity-linked key (Console -> Settings -> Workspaces).
+    # Sent as the `anthropic-workspace-id` header on every request.
+    anthropic_workspace_id: str = Field(default="", validation_alias="ANTHROPIC_WORKSPACE_ID")
     ld_sdk_key: str = Field(default="", validation_alias="LD_SDK_KEY")
     ld_api_token: str = Field(default="", validation_alias="LAUNCHDARKLY_API_TOKEN")
     ld_project_key: str = Field(
@@ -20,8 +23,8 @@ class Settings(BaseSettings):
     # base64 32-byte key; when set, Temporal payloads are encrypted at rest (app/codec.py)
     encryption_key: str = Field(default="", validation_alias="ENCRYPTION_KEY")
 
-    default_model: str = "claude-sonnet-4-6"
-    fallback_model: str = "claude-sonnet-4-6"
+    default_model: str = "claude-opus-5"
+    fallback_model: str = "claude-sonnet-5"
     max_tokens: int = 1024
     max_input_length: int = 2000
     max_retries: int = 2

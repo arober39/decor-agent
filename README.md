@@ -6,6 +6,21 @@ A production-grade LangGraph agent that gives confident, specific interior desig
 
 ![Decor Agent landing page mockup](docs/decor-agent-chat-ui.png)
 
+## Conference talk: API World 2026
+
+This repo is the live demo for **"When Your API Call Takes Five Minutes: An Operations Playbook for Long-Running LLM Endpoints"** at API World + CloudX + AI TechWorld 2026 (API operations track).
+
+📑 **Slides:** [Google Slides](https://docs.google.com/presentation/d/1wY9MWtNY10n6h-kFuoQoeh-DqdpwlPK_VbWExSertzE/edit?usp=sharing)
+
+REST was designed for sub-second, stateless, deterministic calls. LLM endpoints break every one of those assumptions: a single request can take minutes, retries don't mean what they used to, models and prompts change faster than deploys, and workers crash mid-request. The talk argues that a long-running LLM endpoint isn't an API anymore — it's a workflow with an HTTP face — and uses this design assistant to show what operating one takes: endpoint shapes, durable execution (the worker gets killed on stage and the user never notices), runtime config control, and the observability that ties them together.
+
+Talk materials live in `docs/`:
+
+- [docs/cfp-api-world-2026.md](docs/cfp-api-world-2026.md) — accepted abstract
+- [docs/talk-api-world-2026.md](docs/talk-api-world-2026.md) — talk draft and narrative arc
+- [docs/talk-script-api-world-2026.txt](docs/talk-script-api-world-2026.txt) — speaker script
+- [docs/talk-assets/](docs/talk-assets/) — code screenshots used in the slides
+
 ## What it does
 
 Users ask Decora, a senior interior design advisor, about colors, layouts, and trends. The agent routes each question to one of three specialist tools, synthesizes a short opinionated response, and returns it alongside rich metadata for observability.
@@ -108,7 +123,7 @@ decor-agent/
 ```bash
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env           # then edit to add ANTHROPIC_API_KEY
+cp .env.example .env           # then edit to add ANTHROPIC_API_KEY (and ANTHROPIC_WORKSPACE_ID if your key is identity-linked)
 python server.py               # starts on http://localhost:8000
 ```
 
@@ -142,6 +157,8 @@ python -m pytest test_workflow.py -v       # Temporal workflow (after) — no AP
 | Variable | Default | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | _required_ | Claude API key |
+| `ANTHROPIC_WORKSPACE_ID` | `""` | Required if your API key is identity-linked (the API returns `anthropic-workspace-id is required`). Find it in the Anthropic Console under Settings → Workspaces; starts with `wrkspc_`. Sent as the `anthropic-workspace-id` header on every request. |
+| `ENCRYPTION_KEY` | `""` | Base64-encoded 32-byte key. When set, Temporal payloads are encrypted at rest with AES-256-GCM (see [TEMPORAL.md](TEMPORAL.md)) |
 | `LD_SDK_KEY` | `""` | LaunchDarkly server SDK key (used by `flags.py` AI Configs) |
 | `LOG_LEVEL` | `INFO` | structlog level |
 | `ENVIRONMENT` | `development` | Switches log format between console and JSON |
