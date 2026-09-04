@@ -14,13 +14,6 @@ This repo is the live demo for **"When Your API Call Takes Five Minutes: An Oper
 
 REST was designed for sub-second, stateless, deterministic calls. LLM endpoints break every one of those assumptions: a single request can take minutes, retries don't mean what they used to, models and prompts change faster than deploys, and workers crash mid-request. The talk argues that a long-running LLM endpoint isn't an API anymore — it's a workflow with an HTTP face — and uses this design assistant to show what operating one takes: endpoint shapes, durable execution (the worker gets killed on stage and the user never notices), runtime config control, and the observability that ties them together.
 
-Talk materials live in `docs/`:
-
-- [docs/cfp-api-world-2026.md](docs/cfp-api-world-2026.md) — accepted abstract
-- [docs/talk-api-world-2026.md](docs/talk-api-world-2026.md) — talk draft and narrative arc
-- [docs/talk-script-api-world-2026.txt](docs/talk-script-api-world-2026.txt) — speaker script
-- [docs/talk-assets/](docs/talk-assets/) — code screenshots used in the slides
-
 ## What it does
 
 Users ask Decora, a senior interior design advisor, about colors, layouts, and trends. The agent routes each question to one of three specialist tools, synthesizes a short opinionated response, and returns it alongside rich metadata for observability.
