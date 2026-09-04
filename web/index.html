@@ -16,12 +16,16 @@
     <main class="page">
       <section class="chat-shell" aria-label="Decor Agent chat">
         <div class="shell-header">
-          <p class="eyebrow">Alexis &amp; Partners</p>
+          <p class="eyebrow">Decora</p>
           <h1>Design Chat</h1>
           <p class="subcopy">
             Ask for room styling, color palette ideas, furniture picks, or decor advice.
           </p>
         </div>
+        <nav class="tabs" style="display:flex;gap:8px;margin-bottom:12px;">
+          <a href="/" style="text-decoration:none;padding:8px 16px;border-radius:10px;font-weight:600;background:var(--accent);color:#fff;">Decor Agent</a>
+          <a href="/temporal" style="text-decoration:none;padding:8px 16px;border-radius:10px;font-weight:600;color:var(--text-body);border:1px solid rgba(91,58,29,0.15);">Decor Agent (Pro)</a>
+        </nav>
 
         <div id="messages" class="messages" role="log" aria-live="polite"></div>
 

@@ -1,0 +1,85 @@
+Slide 1
+
+Hi, I'm Alexis Roberson, I'm a developer educator at LaunchDarkly, and for the next twenty-five minutes I want to talk about what it takes to operate an API call that runs for minutes. While we move through this conversation, I want you to hang on to this thought. Even if you can't move forward, the least you can do is maintain, because going backwards is expensive and we'll find out just what I mean by this shortly.
+
+Slide 2
+
+This request has been running for four and a half minutes. One POST request, plan my whole apartment to a home decor ai assistant, with a budget of eight thousand dollars (that's a nice little budget, my budget for my apartment was a bit more modest), so we have this request running and the cursor is still blinking. (pretend you see a blinking cursor) One thing we can assume is that it will succeed. So we can focus on the bigger question, or what does your infrastructure do in the meantime. And I want to be clear, I'm all for making calls faster, this app already plans every room in parallel. What's left after the optimizing is model inference time, and that duration belongs to the provider. Today I'm taking the minutes as given and asking how to operate them. And once a call runs that long, I'd argue the call itself stops being the unit of work. And we should shift our focus to keeping the work itself alive throughout the full duration. Hold that thought, we'll come back to what replaces it.
+
+Slide 3
+
+REST APIs have long operated from these implicit agreements. Requests are sub-second, so your gateways, your load balancers, and your clients all carry timeouts tuned for milliseconds. Requests are stateless, so any replica can serve any request. Requests are deterministic, so a retry is a repeat. A repeat of the same input and expected output. And requests are stable, behavior only changes when you deploy. Pretty intuitive, right? Then the bombshell, LLM calls, entered the Villa and started challenging everything we know about our connections. (I don't watch love island but it still made for a supreme metaphor here) So LLM calls meant one request into a model takes minutes while also answering differently every time, quietly breaking all four agreements.
+
+Slide 4
+
+The first to fold is duration. Every timeout standing between your user and the model, the load balancer, the gateway, the client itself, was tuned for a world where requests finish in under a second. So a five-minute request trips them by design. Nothing is misconfigured, the stack is doing exactly what it was told. And when it trips, the failure splits in two. The client sees a dead connection and gives up, while the work has no idea and keeps going. Since there aren't any errors firing anywhere useful, the first person to notice is your user. And the whole time, the worker is still spending tokens finishing an answer that no longer has anywhere to arrive. You paid full price for a response no one received.
+
+Slide 5
+
+The second failure I call crash amnesia, where the work dies while the client is still waiting. In my previous setup, recovery was hand-rolled using a LangGraph error handler. It counts retries in state, and when the retries run out, the best it can do is send an apology message. Everything it's protecting lives in the same process it dies with, so a worker dying at room two of three restarts from zero. In this case, the user waits twice, you pay twice.
+
+Slide 6
+
+Then retries stop meaning what they used to. Model output is non-deterministic, the same input does not produce the same output, and that quietly breaks a contract we've trusted for decades.
+
+Slide 7
+
+And the last assumption to fall is stability. Models deprecate, prompts change weekly, providers have regional bad days, and your deploy cycle moves at none of those speeds. If the model name and the prompt are hardcoded, every prompt tweak is a deploy and every provider incident is an outage. The most volatile parts of your system are the ones with no lever attached. Keep that one in your pocket, it comes back as the third play.
+
+Slide 8
+
+So the answer starts with a bit of reframing. Instead of viewing it as an API, view it as a workflow with an HTTP face. Then the HTTP layer keeps exactly four jobs, it starts work, it reports progress, it accepts decisions, and it delivers results. Everything else, the state, the retries, the memory of what's already finished, moves into a durable execution layer, or a runtime whose whole purpose is to make progress survive the disruption of any single process. Every failure now has a correlated fix.
+
+Slide 9
+
+(Deck, slide 9. Stay on the slide the whole time, the demo views come next.)
+
+To test this out I built Decora, an interior-design assistant. You ask it to plan your apartment on a budget, and one HTTP request fans out into separate model calls, one per room, each taking minutes and obviously costing some tokens. (Gesture at the architecture diagram as you name the layers.) For the durable execution layer I decided to go with Temporal, because it has a good way to visualize the failure and recovery process, but I'm also playing around with Restate as a replacement because it's supposed to be more straightforward with setup. And for runtime control over models and prompts I of course went with LaunchDarkly.
+
+Slide 10
+
+(Leave the deck. You'll rotate between three views: the app UI at /temporal, the worker terminal, and the Temporal UI at :8233. Start on the app UI.)
+
+Let's run it. (Set the budget to 8000, click Draft whole-home plan.) I'm asking Decora to plan my whole apartment, eight thousand dollar budget. (Switch to the Temporal UI, workflow list.) And notice the first thing that happens, that button click fired one POST, it returned immediately, and over in the Temporal UI a workflow appears with an ID. That ID is the real handle on the work, the user's progress view is just polling it. The work fans out behind it, one activity per room. In Temporal an activity is a piece of real work like an LLM call, a network request, or a database write, so in this case the LLM call is our activity. And its results get checkpointed the moment it finishes. (Open the workflow, scroll the event history as rows land.) While the rooms plan themselves, if we switch over to the workflow view we can see the event history filling in. Every row is a checkpoint, activity scheduled, activity started, activity completed, each with its inputs and outputs. That table is the workflow's actual memory, and it lives outside my process, which is nice. (Switch back to the app UI to see the finished room plan.)
+
+(Switch to the worker terminal. Wait until at least one room is done and one is in flight.) Now I'm going to kill the worker. (Ctrl-C. Let the dead terminal sit visible a beat.) (Switch to the app UI.) As you can see, the progress view is still breathing, the UI degrades gracefully, so the user is unaffected by the crash. (Switch to the Temporal UI.) And if we go back to the workflow tab, it still says Running. I just did to my own app what a bad deploy, an out-of-memory kill, or a spot-instance reclaim does to yours on a regular week.
+
+(Switch to the worker terminal, run python -m app.worker, then switch straight to the Temporal UI event history.) Then once I bring the worker back, it'll replay the event history, see the living room and the bedroom are done, take their results straight from the table, and resume only the room that was in flight. The finished rooms never touch the model again. While the worker was in crash state, the work couldn't move forward, but it maintained. And when the worker came back, it never went backwards, because going backwards is regenerating, and regenerating is the expensive part. No progress lost, no finished work repeated, no double spend on the rooms that completed.
+
+(Switch to the app UI, wait for the draft plan and the approval buttons to appear.) One more thing before the plan ships. The workflow finishes planning and then parks, it's waiting for a human to approve. (Switch to the worker terminal.) And I'll kill the worker again right here, while it's parked. (Ctrl-C, restart the worker.) Still fine. This wait costs nothing and could last a week, and if you're wondering where a paused request lives in your stack today, (Temporal UI) here it's one row of event history. (Switch to the app UI, click Approve.) I approve, the shopping list generates, and that's the whole demo.
+
+Slide 11
+
+So the lingering principles here are make it survivable, which we just witnessed with the crash demo, the next part is make it visible, what new metrics should be exposed so you still have insight while you wait, and lastly make it steerable, if it's going off the rails can you nudge it in the right direction, can it fail gracefully to an older working variation.
+
+Slide 12
+
+The first part of making it survivable is never letting one request carry minutes of work. A request's only job should be to hand back an ID and get out of the way, so the workflow can do its thing.
+
+Slide 13
+
+If you remember before, the retry logic was a LangGraph handler where I had to consider the edge cases, here we see it replaced by a retry policy. So all that plumbing gets offloaded without compromising reliability. This works for situations where retries are more like a rerolling of the dice with non-deterministic outputs. And since results are checkpointed, a retry only ever re-rolls the step that failed, never an answer we already have.
+
+Slide 14
+
+Then there's the human-in-the-loop component that also requires the same courtesy of still running even when the worker crashes. This all centers around survivability.
+
+Slide 15
+
+For making it visible, traditional RED metrics still apply, but a model call adds three dimensions, cost per call, quality of output, and which prompt and model version served it. An LLM call can succeed at the HTTP layer and fail at the semantic layer.
+
+Slide 16
+
+Now how do we steer it, by putting the most risky things, the model, the prompt, the parameters, behind runtime levers. Externalize them, version them, and one mechanism buys you three capabilities. You can canary a change on a slice of traffic and roll it back in one click. You can decide at runtime which traffic gets which model. And during a provider incident, one targeting rule downgrades low-priority traffic to a cheaper variation instead of failing everyone.
+
+Slide 17
+
+So here's the durable execution landscape. They all handle their own version of checkpointed side effects, parking for a human, and fan-out. Live progress queries and encrypted history come built in on some of these and do-it-yourself on others. The real choice is operational posture, run it yourself, managed JSON, a single binary, or just a library. The playbook is pretty much the same everywhere.
+
+Slide 18
+
+Survivable, visible, steerable. Classic API operations spent decades making calls short, uniform, and repeatable. LLM operations starts by admitting your calls are long, unique, and expensive, and rebuilds every play on top of that admission. When your API call takes five minutes, the call was never the unit of work. The workflow is.
+
+Slide 19
+
+That's everything I've got. The repo is on screen, the whole demo is in it, crash included. I'd love your questions.
