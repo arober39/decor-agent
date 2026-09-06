@@ -40,3 +40,18 @@ Pinned `mcp>=2.1.1` in [`requirements.txt`](../requirements.txt). Use `MCPServer
 - `search_products(...)` — keyword + filters. This is what a `search_catalog` MCP *tool* will call later. Today it is just a function.
 
 **What this is not.** Not a tool. Not a prompt. Not an agent. A module goose or Decora will both use once we hang it on MCP.
+
+## Slice: catalog search as an MCP tool
+
+**The protocol idea.** A *tool* is model-controlled. The host advertises it via `tools/list`. The model picks it. The host (or test client) executes `tools/call`. The server runs code and returns content. Claude never imported `search_products`.
+
+**What each block does**
+
+- [`mcp_servers/decor_design.py`](../mcp_servers/decor_design.py) `MCPServer(...)` — names this environment `decor-design`. `instructions` is what a host may show the model about the *server*, not Decora’s personality.
+- `@server.tool()` `search_catalog` — the SDK turns the type hints and docstring into the JSON Schema that `tools/list` returns. The body only calls `search_products`. No LLM.
+- `if __name__ == "__main__"` `server.run(transport="stdio")` — Inspector and goose can spawn this as a subprocess. JSON-RPC on stdin/stdout.
+- [`test_mcp_catalog.py`](../test_mcp_catalog.py) `Client(server)` — in-memory MCP client. Same messages as stdio, no subprocess. If this test passes, the wire protocol works.
+
+**How this differs from `style_advisor`.** That file was `@tool` from LangChain plus `llm.invoke`. This file never thinks. It looks up inventory.
+
+Try it yourself later: `npx @modelcontextprotocol/inspector python mcp_servers/decor_design.py` and call `search_catalog`.
