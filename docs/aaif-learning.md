@@ -91,3 +91,7 @@ The test in [`test_mcp_catalog.py`](../test_mcp_catalog.py) now does `call_tool`
 **Write vs read.** `project://` is observe. `update_project` is act. The model may set a brief, budget, room, or add a catalog SKU. It cannot mark items `committed`. That stays on `approve` in the store, which we have not hung on a tool yet.
 
 **The tool body** is a thin switch on `action`. Every successful call returns `store.snapshot` so the host sees the new world in the `tools/call` result. `add_spec` still fails on unknown SKUs — the error travels over MCP as JSON, not as a Python exception in the host.
+
+## Slice: request_approval MCP tool
+
+**Human gate.** MCP says mutating work may need consent. `request_approval` is the model saying “I am done; a person must commit this.” It sets `pending_approval`. It does **not** flip drafts to committed. `store.approve` stays off the model’s tool list on purpose. The host UI will call approve. If we exposed approve as a tool, the model could commit spend by itself.

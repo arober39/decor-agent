@@ -61,6 +61,14 @@ async def _run() -> None:
         resource = await client.read_resource("project://job-1")
         assert json.loads(resource.contents[0].text)["budget"]["total_cents"] == 200000
 
+        gated = await client.call_tool(
+            "request_approval",
+            {"context_key": "job-1", "kind": "spec", "summary": "Living room sofa under budget."},
+        )
+        gated_body = _text(gated)
+        assert gated_body["pending_approval"] is True
+        assert gated_body["spec_list"][0]["status"] == "draft"
+
 
 def test_update_project_over_mcp() -> None:
     anyio.run(_run)

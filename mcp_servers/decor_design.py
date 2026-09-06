@@ -134,5 +134,19 @@ def update_project(
     return store.snapshot(context_key)
 
 
+@server.tool()
+def request_approval(context_key: str, kind: str, summary: str) -> dict:
+    """Pause the job and ask the human to approve concept, budget, or spec.
+
+    After this call, stop sourcing. Do not mark items committed yourself.
+    """
+    if kind not in {"concept", "budget", "spec"}:
+        return {"error": "kind must be concept, budget, or spec"}
+    if not summary.strip():
+        return {"error": "summary is required"}
+    store.request_approval(context_key, kind, summary.strip())  # type: ignore[arg-type]
+    return store.snapshot(context_key)
+
+
 if __name__ == "__main__":
     server.run(transport="stdio")
