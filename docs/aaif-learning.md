@@ -103,3 +103,7 @@ The test in [`test_mcp_catalog.py`](../test_mcp_catalog.py) now does `call_tool`
 If we stuffed this into `AGENT_SYSTEM_PROMPT`, every request would be “plan a room.” A greeting would still trigger the whole job. MCP keeps “start this kind of job” as an explicit user move.
 
 Inspector: Prompts → `plan_room` → fill room + budget. No chat app required. That is the Phase 1 success check.
+
+## Slice: ignore extra env keys
+
+Local `.env` still has Temporal-era keys. Settings used to crash on unknown fields. `extra="ignore"` lets the host boot without pulling Temporal code. Not an AAIF idea — just so the next slice can call `get_settings()`.
