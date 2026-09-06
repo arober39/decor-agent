@@ -69,6 +69,13 @@ async def _run() -> None:
         assert gated_body["pending_approval"] is True
         assert gated_body["spec_list"][0]["status"] == "draft"
 
+        prompts = await client.list_prompts()
+        assert any(prompt.name == "plan_room" for prompt in prompts.prompts)
+        got = await client.get_prompt("plan_room", {"room": "12x14 living room", "budget_dollars": "2000"})
+        text = got.messages[0].content.text
+        assert "12x14 living room" in text
+        assert "2000" in text
+
 
 def test_update_project_over_mcp() -> None:
     anyio.run(_run)

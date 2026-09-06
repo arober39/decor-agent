@@ -95,3 +95,11 @@ The test in [`test_mcp_catalog.py`](../test_mcp_catalog.py) now does `call_tool`
 ## Slice: request_approval MCP tool
 
 **Human gate.** MCP says mutating work may need consent. `request_approval` is the model saying “I am done; a person must commit this.” It sets `pending_approval`. It does **not** flip drafts to committed. `store.approve` stays off the model’s tool list on purpose. The host UI will call approve. If we exposed approve as a tool, the model could commit spend by itself.
+
+## Slice: plan_room MCP prompt
+
+**Prompts are user-controlled.** A prompt is not Decora’s system prompt in `app/prompts.py`. The user (or a slash command) asks for `plan_room` with arguments. `prompts/get` returns the message template. The host may then send that to the model.
+
+If we stuffed this into `AGENT_SYSTEM_PROMPT`, every request would be “plan a room.” A greeting would still trigger the whole job. MCP keeps “start this kind of job” as an explicit user move.
+
+Inspector: Prompts → `plan_room` → fill room + budget. No chat app required. That is the Phase 1 success check.

@@ -148,5 +148,24 @@ def request_approval(context_key: str, kind: str, summary: str) -> dict:
     return store.snapshot(context_key)
 
 
+@server.prompt()
+def plan_room(
+    room: str,
+    budget_dollars: str = "",
+    keep: str = "",
+    avoid: str = "",
+) -> str:
+    """Start a design job for one room. User-invoked — not a hidden system prompt."""
+    budget_line = f"Budget: ${budget_dollars}." if budget_dollars else "Budget is not set yet."
+    keep_line = f"Keep: {keep}." if keep else "Nothing required to keep."
+    avoid_line = f"Avoid: {avoid}." if avoid else "No hard avoids."
+    return (
+        f"Plan the {room}. {budget_line} {keep_line} {avoid_line} "
+        "Read project:// for this client, search the catalog for real SKUs, "
+        "update the project, and request approval when the spec covers the room "
+        "and the budget holds. Do not invent products."
+    )
+
+
 if __name__ == "__main__":
     server.run(transport="stdio")
