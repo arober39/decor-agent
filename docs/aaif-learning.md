@@ -27,3 +27,16 @@ That is the before picture. Next slices put a world *outside* the model and talk
 **What we did not add yet.** No server, no tools. A dependency with no server would be cargo-culting. The next slice creates a catalog (the world). The slice after that exposes it over MCP.
 
 Pinned `mcp>=2.1.1` in [`requirements.txt`](../requirements.txt). Use `MCPServer` — the old docs name `FastMCP` was renamed in v2.
+
+## Slice: seeded catalog (no LLM)
+
+**Why a catalog before an MCP server.** MCP exposes an environment. If we skip this and let Claude invent “West Elm Andes sofas,” the protocol is a socket around a hallucination. The world has to exist first.
+
+**What each piece does**
+
+- `Product` in [`app/catalog.py`](../app/catalog.py) — one real row: sku, brand, category, room, price in cents, tags. Frozen so nothing mutates inventory by accident.
+- `PRODUCTS` — the inventory. If it is not in this tuple, it does not exist.
+- `get_product(sku)` — lookup. Returns `None` for fakes. That `None` is the point.
+- `search_products(...)` — keyword + filters. This is what a `search_catalog` MCP *tool* will call later. Today it is just a function.
+
+**What this is not.** Not a tool. Not a prompt. Not an agent. A module goose or Decora will both use once we hang it on MCP.
