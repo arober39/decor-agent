@@ -14,12 +14,13 @@
   </head>
   <body>
     <main class="page">
+      <div class="workspace">
       <section class="chat-shell" aria-label="Decor Agent chat">
         <div class="shell-header">
           <p class="eyebrow">Alexis &amp; Partners</p>
           <h1>Design Chat</h1>
           <p class="subcopy">
-            Ask for room styling, color palette ideas, furniture picks, or decor advice.
+            Decora runs a design job over MCP: catalog SKUs, a durable project, and your approval before anything is committed.
           </p>
         </div>
 
@@ -35,7 +36,7 @@
             id="prompt"
             name="message"
             type="text"
-            placeholder="Describe your room or ask for inspiration..."
+            placeholder="Describe the room, budget, and what you want to keep..."
             autocomplete="off"
             required
             maxlength="2000"
@@ -43,6 +44,39 @@
           <button id="send" type="submit">Send</button>
         </form>
       </section>
+
+      <aside class="project-panel" aria-label="Design project">
+        <div class="panel-header">
+          <p class="eyebrow">Project</p>
+          <h2 id="project-status">Intake</h2>
+          <p id="project-goal" class="subcopy">This panel is project:// — not the chat transcript.</p>
+        </div>
+        <section>
+          <h3>Budget</h3>
+          <p id="project-budget" class="budget-line">Not set</p>
+        </section>
+        <section>
+          <h3>Brief</h3>
+          <p id="project-brief" class="muted">Waiting for a brief.</p>
+        </section>
+        <section>
+          <h3>Rooms</h3>
+          <ul id="project-rooms" class="plain-list"><li class="muted">None yet</li></ul>
+        </section>
+        <section>
+          <h3>Spec list</h3>
+          <ul id="project-specs" class="plain-list"><li class="muted">Empty until catalog SKUs are added.</li></ul>
+        </section>
+        <div id="approval-card" class="approval-card" hidden>
+          <p class="eyebrow">Needs your approval</p>
+          <p id="approval-summary"></p>
+          <div class="approval-actions">
+            <button id="approve-btn" type="button">Approve</button>
+            <button id="reject-btn" type="button" class="ghost">Reject</button>
+          </div>
+        </div>
+      </aside>
+      </div>
     </main>
 
     <script src="/web/app.js" defer></script>

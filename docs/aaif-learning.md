@@ -135,3 +135,9 @@ Host-only routes (the model cannot call these):
 - `POST /api/project/reject` — records why and clears the gate
 
 That is human consent. `request_approval` is the ask. These routes are the answer.
+
+## Slice: project panel in the chat UI
+
+The right-hand panel is a *view of `project://`*, not a second chat. After each `/api/chat` the browser renders `payload.project`. Approve / Reject hit the host routes that call `store.approve` / `store.reject`. The model never sees those buttons as tools.
+
+If this panel only showed the last assistant paragraph, we would be back to a wrapper. The artifact is the spec list.
