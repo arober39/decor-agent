@@ -70,5 +70,69 @@ def project_resource(context_key: str) -> dict:
     return store.snapshot(context_key)
 
 
+@server.tool()
+def update_project(
+    context_key: str,
+    action: str,
+    lifestyle: str = "",
+    keep: str = "",
+    avoid: str = "",
+    style_preferences: str = "",
+    budget_dollars: float | None = None,
+    room_name: str = "",
+    room_type: str = "living",
+    width_ft: float | None = None,
+    length_ft: float | None = None,
+    existing_pieces: str = "",
+    style_notes: str = "",
+    sku: str = "",
+) -> dict:
+    """Create or update the durable design project for this client.
+
+    action: set_brief | set_budget | upsert_room | add_spec | remove_spec
+    keep, avoid, existing_pieces: comma-separated lists
+    add_spec requires a sku returned by search_catalog
+    """
+    def _parts(value: str) -> list[str]:
+        return [part.strip() for part in value.split(",") if part.strip()]
+
+    if action == "set_brief":
+        store.set_brief(
+            context_key,
+            lifestyle=lifestyle,
+            keep=_parts(keep) if keep else None,
+            avoid=_parts(avoid) if avoid else None,
+            style_preferences=style_preferences,
+        )
+    elif action == "set_budget":
+        if budget_dollars is None:
+            return {"error": "set_budget requires budget_dollars"}
+        store.set_budget(context_key, budget_dollars)
+    elif action == "upsert_room":
+        if not room_name.strip():
+            return {"error": "upsert_room requires room_name"}
+        store.upsert_room(
+            context_key,
+            name=room_name,
+            room_type=room_type,
+            width_ft=width_ft,
+            length_ft=length_ft,
+            existing_pieces=_parts(existing_pieces) if existing_pieces else None,
+            style_notes=style_notes or None,
+        )
+    elif action == "add_spec":
+        try:
+            store.add_spec(context_key, sku, room_name)
+        except ValueError as exc:
+            return {"error": str(exc)}
+    elif action == "remove_spec":
+        if not sku.strip():
+            return {"error": "remove_spec requires sku"}
+        store.remove_spec(context_key, sku)
+    else:
+        return {"error": f"unsupported action: {action}"}
+    return store.snapshot(context_key)
+
+
 if __name__ == "__main__":
     server.run(transport="stdio")

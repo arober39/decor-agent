@@ -85,3 +85,9 @@ The test in [`test_mcp_catalog.py`](../test_mcp_catalog.py) now does `call_tool`
 **Why `project://{context_key}` is a resource, not a tool.** The host should be able to load the current job *without* asking the model to “please fetch state.” That is `resources/read`. The model may still *change* the project through tools. Read = application-controlled. Write = model-controlled, with human gates later.
 
 **The new block** in [`mcp_servers/decor_design.py`](../mcp_servers/decor_design.py): `@server.resource("project://{context_key}")` calls `store.snapshot`. Empty keys create an intake project. Inspector can open `project://demo` with no Claude.
+
+## Slice: update_project MCP tool
+
+**Write vs read.** `project://` is observe. `update_project` is act. The model may set a brief, budget, room, or add a catalog SKU. It cannot mark items `committed`. That stays on `approve` in the store, which we have not hung on a tool yet.
+
+**The tool body** is a thin switch on `action`. Every successful call returns `store.snapshot` so the host sees the new world in the `tools/call` result. `add_spec` still fails on unknown SKUs — the error travels over MCP as JSON, not as a Python exception in the host.
