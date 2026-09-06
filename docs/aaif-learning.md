@@ -55,3 +55,15 @@ Pinned `mcp>=2.1.1` in [`requirements.txt`](../requirements.txt). Use `MCPServer
 **How this differs from `style_advisor`.** That file was `@tool` from LangChain plus `llm.invoke`. This file never thinks. It looks up inventory.
 
 Try it yourself later: `npx @modelcontextprotocol/inspector python mcp_servers/decor_design.py` and call `search_catalog`.
+
+## Slice: catalog product as an MCP resource
+
+**Tools vs resources.** A tool is something the *model* decides to run. A resource is something the *application* can fetch and attach as context. `search_catalog` is “find me candidates.” `catalog://sku/{sku}` is “here is the record for this SKU.” Same inventory, different primitive, different who-decides.
+
+**What the new block does**
+
+- `@server.resource("catalog://sku/{sku}")` — the `{sku}` makes this a *template* resource. `resources/templates/list` advertises it. `resources/read` with `catalog://sku/ART-SOFA-721` runs `catalog_sku("ART-SOFA-721")`.
+- Return type `dict` — the SDK JSON-encodes it. The test reads `resource.contents[0].text`.
+- Unknown SKU — we still return a JSON error body. The resource exists; the product does not. That is more honest than a 404-shaped crash if a host prefetches a hallucinated SKU.
+
+The test in [`test_mcp_catalog.py`](../test_mcp_catalog.py) now does `call_tool` then `read_resource` for the first hit. Two protocol methods, one catalog.

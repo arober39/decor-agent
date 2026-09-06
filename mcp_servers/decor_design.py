@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from mcp.server import MCPServer
 
-from app.catalog import search_products
+from app.catalog import get_product, search_products
 
 server = MCPServer(
     name="decor-design",
@@ -46,6 +46,18 @@ def search_catalog(
         limit=limit,
     )
     return {"matches": [product.as_dict() for product in matches]}
+
+
+@server.resource(
+    "catalog://sku/{sku}",
+    mime_type="application/json",
+    description="Read one catalog product by SKU. Missing SKUs return an error body.",
+)
+def catalog_sku(sku: str) -> dict:
+    product = get_product(sku)
+    if product is None:
+        return {"error": "unknown_sku", "sku": sku}
+    return product.as_dict()
 
 
 if __name__ == "__main__":

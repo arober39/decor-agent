@@ -25,6 +25,15 @@ async def _run() -> None:
         assert matches
         assert all("sku" in item for item in matches)
 
+        sku = matches[0]["sku"]
+        resource = await client.read_resource(f"catalog://sku/{sku}")
+        text = resource.contents[0].text
+        body = json.loads(text)
+        assert body["sku"] == sku
+
+        missing = await client.read_resource("catalog://sku/FAKE-SOFA")
+        assert json.loads(missing.contents[0].text)["error"] == "unknown_sku"
+
 
 def test_search_catalog_over_mcp() -> None:
     anyio.run(_run)
