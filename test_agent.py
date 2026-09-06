@@ -4,7 +4,7 @@ Each test invokes run_agent() and verifies routing behavior from the
 returned metadata. A summary table is printed at the end.
 
 Expected values:
-  - A string tool name (e.g. "style_advisor") — must match routed_to
+  - A string tool name (e.g. "update_project") — must match routed_to
   - A set of strings — any one of them is acceptable (edge cases)
   - "direct" — the agent responded without calling a tool (off-topic)
   - "rejected" — input_guard blocked the request
@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass
 from typing import Union
 
-from app.graph import run_agent
+from app.harness import run_agent
 
 
 Expected = Union[str, set[str]]
@@ -30,16 +30,18 @@ class TestCase:
     expected: Expected
 
 
+PROJECT_TOOLS = {"update_project", "search_catalog", "request_approval"}
+
 TESTS: list[TestCase] = [
-    # --- Routing tests ---
-    TestCase(1, "routing", "What paint color works with dark oak floors?", "style_advisor"),
-    TestCase(2, "routing", "I have a 12x14 living room with a $2000 budget", "room_planner"),
-    TestCase(3, "routing", "Is terrazzo still trending?", "trend_spotter"),
-    TestCase(4, "routing", "Should I go velvet or linen for my sofa?", "style_advisor"),
-    TestCase(5, "routing", "My bedroom is 10x11 and I need a queen bed plus WFH desk", "room_planner"),
-    TestCase(6, "routing", "What's replacing the all-white kitchen?", "trend_spotter"),
-    TestCase(7, "routing", "Help me compromise between mid-century modern and farmhouse", "style_advisor"),
-    TestCase(8, "routing", "How do I make a small bathroom feel bigger?", "room_planner"),
+    # --- Job tests ---
+    TestCase(1, "routing", "What paint color works with dark oak floors?", PROJECT_TOOLS),
+    TestCase(2, "routing", "I have a 12x14 living room with a $2000 budget", PROJECT_TOOLS),
+    TestCase(3, "routing", "Is terrazzo still trending for a bathroom floor?", PROJECT_TOOLS),
+    TestCase(4, "routing", "Should I go velvet or linen for my sofa?", PROJECT_TOOLS),
+    TestCase(5, "routing", "My bedroom is 10x11 and I need a queen bed plus WFH desk", PROJECT_TOOLS),
+    TestCase(6, "routing", "What's replacing the all-white kitchen?", PROJECT_TOOLS),
+    TestCase(7, "routing", "Help me compromise between mid-century modern and farmhouse", PROJECT_TOOLS),
+    TestCase(8, "routing", "How do I make a small bathroom feel bigger?", PROJECT_TOOLS),
 
     # --- Guard tests ---
     TestCase(9, "guard", "", "rejected"),
@@ -51,7 +53,7 @@ TESTS: list[TestCase] = [
 
     # --- Edge cases ---
     TestCase(13, "edge", "I want a boho vibe but also need to fit a 90-inch sectional in a 10x12 room",
-             {"style_advisor", "room_planner"}),
+             PROJECT_TOOLS),
 ]
 
 

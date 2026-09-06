@@ -123,3 +123,15 @@ Local `.env` still has Temporal-era keys. Settings used to crash on unknown fiel
 [`app/graph.py`](../app/graph.py) still has the old specialist graph. The host does not use it yet. Next slice points `/api/chat` here.
 
 **What would still be a wrapper.** Binding LangChain `@tool` functions that call `search_products` directly. Same loop, no protocol, goose cannot share the environment.
+
+## Slice: chat HTTP face uses the harness
+
+[`server.py`](../server.py) `/api/chat` now calls `app.harness.run_agent`, not `app.graph.run_agent`. The response includes `project` — the same JSON as `project://{context_key}`.
+
+Host-only routes (the model cannot call these):
+
+- `GET /api/project` — `resources/read` equivalent for the UI
+- `POST /api/project/approve` — `store.approve` (commits drafts)
+- `POST /api/project/reject` — records why and clears the gate
+
+That is human consent. `request_approval` is the ask. These routes are the answer.

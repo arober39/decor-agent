@@ -18,8 +18,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.flags import build_context, get_flag, set_current_user_tier
-from app.graph import run_agent
+from app.harness import run_agent
 from app.logging import configure_logging, get_logger
+from app.project import ApprovalKind
+from app import store
 
 VERSION = "1.0.0"
 
@@ -35,6 +37,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     metadata: dict
+    project: dict = Field(default_factory=dict)
     message_id: str
     timestamp: str
 
@@ -42,6 +45,13 @@ class ChatResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     version: str
+
+
+class ProjectRequest(BaseModel):
+    context_key: str
+    user_tier: Literal["free", "premium"] | None = None
+    kind: ApprovalKind | None = None
+    reason: str = ""
 
 
 @asynccontextmanager
@@ -152,6 +162,7 @@ async def chat(req: ChatRequest) -> JSONResponse:
         body = ChatResponse(
             response="Decor Agent is temporarily unavailable for maintenance. Check back soon!",
             metadata={"routed_to": "maintenance"},
+            project=store.snapshot(context_key),
             message_id=message_id,
             timestamp=timestamp,
         )
@@ -179,6 +190,7 @@ async def chat(req: ChatRequest) -> JSONResponse:
     body = ChatResponse(
         response=result["response"],
         metadata=result["metadata"],
+        project=result.get("project") or store.snapshot(context_key),
         message_id=message_id,
         timestamp=timestamp,
     )
@@ -190,6 +202,25 @@ async def chat(req: ChatRequest) -> JSONResponse:
         response_len=len(result["response"]),
     )
     return JSONResponse(status_code=200, content=body.model_dump())
+
+
+@app.get("/api/project")
+async def get_project(context_key: str) -> dict:
+    return store.snapshot(context_key)
+
+
+@app.post("/api/project/approve")
+async def approve_project(req: ProjectRequest) -> dict:
+    store.approve(req.context_key, kind=req.kind)
+    log.info("project.approved", context_key=req.context_key, kind=req.kind)
+    return store.snapshot(req.context_key)
+
+
+@app.post("/api/project/reject")
+async def reject_project(req: ProjectRequest) -> dict:
+    store.reject(req.context_key, reason=req.reason)
+    log.info("project.rejected", context_key=req.context_key, reason=req.reason)
+    return store.snapshot(req.context_key)
 
 
 if __name__ == "__main__":
