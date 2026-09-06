@@ -67,3 +67,15 @@ Try it yourself later: `npx @modelcontextprotocol/inspector python mcp_servers/d
 - Unknown SKU — we still return a JSON error body. The resource exists; the product does not. That is more honest than a 404-shaped crash if a host prefetches a hallucinated SKU.
 
 The test in [`test_mcp_catalog.py`](../test_mcp_catalog.py) now does `call_tool` then `read_resource` for the first hit. Two protocol methods, one catalog.
+
+## Slice: in-memory design project
+
+**Why a store before `project://`.** Same lesson as the catalog. A resource has to read something real. Chat history is not a home. [`app/project.py`](../app/project.py) is the document (brief, rooms, spec list, budget, approval). [`app/store.py`](../app/store.py) is the filing cabinet keyed by `context_key`.
+
+**What each type is**
+
+- `Room` / `Brief` — intake facts the designer owns.
+- `SpecItem` — a catalog row *on this job*. `draft` until a human approves. `committed` is irreversible from the model’s point of view.
+- `DesignProject.as_public_dict()` — the JSON a `project://` resource will return. No photo bytes, no internals.
+
+`add_spec` calls `get_product`. Unknown SKUs raise. The world still refuses hallucinations before MCP wraps it.
