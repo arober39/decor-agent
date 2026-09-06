@@ -12,3 +12,4 @@ structlog
 requests
 launchdarkly-server-sdk
 launchdarkly-server-sdk-ai
+mcp>=2.1.1

@@ -19,3 +19,11 @@ We are learning the [Agentic AI Foundation](https://aaif.io/) stack by rebuildin
 - No durable home, no real SKUs, no protocol
 
 That is the before picture. Next slices put a world *outside* the model and talk to it with MCP.
+
+## Slice: official MCP Python SDK
+
+**Why this package, not LangChain tools.** MCP is an AAIF standard. LangChain `@tool` is a vendor helper that binds a Python function to one model call. The official [`mcp`](https://py.sdk.modelcontextprotocol.io/) SDK (v2, `MCPServer`) speaks JSON-RPC: `tools/list`, `tools/call`, `resources/read`, `prompts/get`. Goose, Claude Desktop, and our future Decora host all speak that protocol. One environment, many agents.
+
+**What we did not add yet.** No server, no tools. A dependency with no server would be cargo-culting. The next slice creates a catalog (the world). The slice after that exposes it over MCP.
+
+Pinned `mcp>=2.1.1` in [`requirements.txt`](../requirements.txt). Use `MCPServer` — the old docs name `FastMCP` was renamed in v2.
