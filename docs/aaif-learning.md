@@ -107,3 +107,19 @@ Inspector: Prompts → `plan_room` → fill room + budget. No chat app required.
 ## Slice: ignore extra env keys
 
 Local `.env` still has Temporal-era keys. Settings used to crash on unknown fields. `extra="ignore"` lets the host boot without pulling Temporal code. Not an AAIF idea — just so the next slice can call `get_settings()`.
+
+## Slice: MCP harness (the host loop)
+
+**This is the agent.** The model does not import `app.catalog`. It sees tool *schemas* from `tools/list`. When it picks a tool, the harness does `tools/call`. That is the same JSON-RPC Inspector uses.
+
+**What each block in [`app/harness.py`](../app/harness.py) does**
+
+- `bindings_from_mcp_tools` — maps MCP `Tool` objects to Claude `bind_tools` schemas. Discovery, not a hardcoded Python list.
+- `inject_context_key` — the model might forget `context_key`. The host owns the session and fills it in for mutating tools.
+- `_read_project` — `resources/read` `project://{context_key}` every turn. Observe before act.
+- `_run` loop — invoke Claude → if tool calls, `client.call_tool` → append `ToolMessage` → stop on `request_approval` or no more calls. Max 6 iterations.
+- `Client(server)` — in-memory transport. Still MCP. Not `ToolNode(get_tools())`.
+
+[`app/graph.py`](../app/graph.py) still has the old specialist graph. The host does not use it yet. Next slice points `/api/chat` here.
+
+**What would still be a wrapper.** Binding LangChain `@tool` functions that call `search_products` directly. Same loop, no protocol, goose cannot share the environment.

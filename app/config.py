@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     max_tokens: int = 1024
     max_input_length: int = 2000
     max_retries: int = 2
+    max_agent_iterations: int = 6
 
 
 @lru_cache(maxsize=1)
