@@ -1,69 +1,74 @@
-# Decor Agent
+# Decor Agent (Decora)
 
-A production-grade LangGraph agent that gives confident, specific interior design advice. Built to demonstrate the LaunchDarkly AI iteration loop — AI Configs for runtime-managed prompts and models, progressive release, online evals, and observability.
+An MCP-first interior design agent. Decora furnishes a room from a real catalog, writes the job to a design project, and stops for human approval before anything is committed.
 
-![Decor Agent landing page mockup](docs/decor-agent-chat-ui.png)
+This is not a chat wrapper. The model does not invent SKUs or keep the spec in conversation history. The world lives on an MCP server; the Decor app is a host that discovers tools, reads resources, and lets you approve the cart.
+
+![Decor Agent landing page](docs/decor-agent-chat-ui.png)
+
+Built against the [Agentic AI Foundation](https://aaif.io/) MCP standard. Why each slice exists is in [`docs/aaif-learning.md`](docs/aaif-learning.md).
 
 ## What it does
 
-Users ask Decora, a senior interior design advisor, about colors, layouts, and trends. The agent routes each question to one of three specialist tools, synthesizes a short opinionated response, and returns it alongside rich metadata for observability.
+You describe a room, budget, and constraints. Decora searches seeded inventory, updates `project://{context_key}`, and calls `request_approval` when the spec covers the room and the budget holds. You approve or reject in the UI. Draft items stay draft until you do.
 
-Example questions:
+Example jobs:
 
-- "What paint color works with dark oak floors?" → `style_advisor`
-- "I have a 12x14 living room with a $2000 budget" → `room_planner`
-- "Is terrazzo still trending?" → `trend_spotter`
-- "How do I make a small bathroom feel bigger?" → `room_planner`
-- "Hello!" → direct response, no tool call
+- "12x14 living room, $2000, keep grandma's credenza"
+- "What paint from the catalog works with dark oak floors?"
+- "Add a sofa under $1200 and pause for approval"
+
+Old specialist prompts (`style_advisor`, `room_planner`, `trend_spotter`) are still in the tree. `/api/chat` does not use them.
 
 ## Architecture
 
 ```
-START
-  ↓
-input_guard        (length / PII / empty checks — deterministic)
-  ↓
-agent              (Claude with bound tools — picks a tool or responds directly)
-  ↓
-execute_tools      (ToolNode runs the selected tool, which makes its own specialist LLM call)
-  ↓
-error_handler      (bounded retry up to max_retries, then graceful fallback)
-  ↓
-agent              (loops back to synthesize the tool result)
-  ↓
-response_formatter (builds metadata sidecar: routed_to, tool_calls_made, tokens, latency)
-  ↓
-END
+Host (FastAPI + web/)
+  chat UI + project panel
+  harness: observe → tools/list → model → tools/call → stop for approval
+  MCP client
+        │
+        │  JSON-RPC (in-process Client, or stdio for Inspector)
+        ▼
+Server (mcp_servers/decor_design.py)  — no Claude
+  tools:     search_catalog, update_project, request_approval
+  resources: project://{context_key}, catalog://sku/{sku}
+  prompts:   plan_room (user-invoked)
+        │
+        ▼
+World: seeded catalog + in-memory project store
 ```
 
-Each node is a checkpoint boundary, so a failure in `execute_tools` resumes from there on retry, not from the start.
+| Primitive | Who controls it | In this repo |
+|---|---|---|
+| **Tools** | Model | Search inventory, mutate the project, ask to commit |
+| **Resources** | Host / app | Read the project and a SKU without a tool call |
+| **Prompts** | User | `plan_room` — room, budget, keep, avoid |
+
+The model cannot call `approve`. That is a host route on purpose.
 
 ## Project layout
 
 ```
 decor-agent/
+├── mcp_servers/decor_design.py   # MCP environment (tools, resources, prompts)
 ├── app/
-│   ├── config.py              # Pydantic-settings singleton
-│   ├── logging.py             # structlog (JSON prod / console dev)
-│   ├── state.py               # AgentState + metadata merge reducer
-│   ├── prompts.py             # Four structured system prompts
-│   ├── flags.py               # LaunchDarkly integration (pending)
-│   ├── graph.py               # Graph definition + run_agent()
-│   ├── nodes/
-│   │   ├── input_guard.py
-│   │   ├── agent.py
-│   │   ├── error_handler.py
-│   │   └── response_formatter.py
-│   └── tools/
-│       ├── style_advisor.py
-│       ├── room_planner.py
-│       └── trend_spotter.py
-├── server.py                  # FastAPI — /api/chat, /api/health, static /web
-├── test_agent.py              # 13-case end-to-end suite
-├── generate_traffic.py        # Load generator (pending)
-├── web/                       # Static frontend
-├── docs/                      # README assets
-├── requirements.txt
+│   ├── catalog.py                # Seeded SKUs — if it is not here, it does not exist
+│   ├── project.py                # Brief, rooms, spec list, budget, approval
+│   ├── store.py                  # In-memory projects keyed by context_key
+│   ├── harness.py                # Host loop: discover tools, call MCP, read project://
+│   ├── prompts.py                # Decora system prompt (not plan_room)
+│   ├── graph.py                  # Legacy specialist graph — unused by /api/chat
+│   └── tools/                    # Legacy LLM “tools” — unused by /api/chat
+├── server.py                     # FastAPI: /api/chat, /api/project, approve, reject
+├── web/                          # Chat + project panel
+├── test_catalog.py
+├── test_store.py
+├── test_mcp_catalog.py
+├── test_mcp_project.py
+├── test_harness.py
+├── test_agent.py                 # Live LLM e2e (needs ANTHROPIC_API_KEY)
+├── docs/aaif-learning.md
 └── .env.example
 ```
 
@@ -72,50 +77,80 @@ decor-agent/
 ```bash
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env           # then edit to add ANTHROPIC_API_KEY
-python server.py               # starts on http://localhost:8000
+cp .env.example .env           # then add ANTHROPIC_API_KEY
+python server.py               # http://localhost:8000
 ```
 
-Open `http://localhost:8000/docs` for the interactive Swagger UI, or hit the API directly:
+Open the chat UI and give Decora a room. The right-hand panel is `project://`, not a second transcript.
 
 ```bash
 curl -X POST http://localhost:8000/api/chat \
   -H 'Content-Type: application/json' \
-  -d '{"message": "What color goes with walnut floors?"}'
+  -d '{"message": "Plan a 12x14 living room with a $2000 budget"}'
 ```
 
-## Run the test suite
+Host-only (the model cannot hit these):
+
+```bash
+curl 'http://localhost:8000/api/project?context_key=demo'
+curl -X POST http://localhost:8000/api/project/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"context_key": "demo", "kind": "spec"}'
+```
+
+## Inspect the environment with no LLM
+
+The MCP server is usable without the chat app:
+
+```bash
+python mcp_servers/decor_design.py
+```
+
+Or open [MCP Inspector](https://modelcontextprotocol.io/docs/develop/build-server):
+
+```bash
+npx @modelcontextprotocol/inspector python mcp_servers/decor_design.py
+```
+
+Then `tools/list`, `resources/read` on `project://demo` or `catalog://sku/ART-SOFA-721`, and `prompts/get` `plan_room`.
+
+## Tests
+
+No API key needed for the protocol and store tests:
+
+```bash
+python test_catalog.py test_store.py test_mcp_catalog.py test_mcp_project.py test_harness.py
+```
+
+Live routing against Claude:
 
 ```bash
 LOG_LEVEL=WARNING python test_agent.py
 ```
 
-Current status: **13 / 13 passing** across routing, guard, off-topic, and edge cases.
-
 ## Environment
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | _required_ | Claude API key |
-| `LD_SDK_KEY` | `""` | LaunchDarkly server SDK key (used once `flags.py` is wired) |
+| `ANTHROPIC_API_KEY` | _required for chat_ | Claude API key (not required for Inspector or MCP unit tests) |
+| `LD_SDK_KEY` | `""` | LaunchDarkly server SDK key (unused for the MCP loop) |
 | `LOG_LEVEL` | `INFO` | structlog level |
-| `ENVIRONMENT` | `development` | Switches log format between console and JSON |
+| `ENVIRONMENT` | `development` | Console vs JSON logs |
 
-## Production hygiene
+Unknown `.env` keys are ignored so leftover Temporal-era variables do not crash settings.
 
-- **Input validation** at two layers — Pydantic on the HTTP boundary, `input_guard` inside the graph
-- **Bounded retries** — `max_retries=2`, then a graceful fallback message
-- **Structured logs** on every step: `input_guard.pass`, `agent.invoke`, `tool.invoke/success/error`, `error_handler.retry/exhausted`, `http.request`
-- **Metadata sidecar** on every response: `routed_to`, `tool_calls_made`, token usage, per-node latency, error counts — ready to feed evals and analytics
-- **Errors never leak** to the client; full tracebacks go to logs only
-- **Request IDs** honored from `x-request-id` header or generated per request
+## What's next (not in this tree)
+
+AAIF build order after MCP + this host:
+
+1. Point [goose](https://block.github.io/goose/) at `decor-design` (manual check — if goose cannot furnish a room, the server is not done)
+2. `AGENTS.md` — stop conditions and consent, once the agent exists
+3. A2A — e.g. a retailer agent for stock
+4. agentgateway — only when there is more than one thing to front
+5. LaunchDarkly — gate work that is already real
+
+Temporal (API World durable-workflow demo) lives on [`temporal-api-world`](https://github.com/arober39/decor-agent/tree/temporal-api-world) and `durable-workflows`, not on `main`.
 
 ## Tech stack
 
-Python 3.12 · LangGraph · LangChain · Anthropic Claude Sonnet 4 · FastAPI · Pydantic · structlog · LaunchDarkly (server SDK + AI SDK, pending)
-
-## What's deferred
-
-- `app/flags.py` — LaunchDarkly SDK + AI Configs integration (model, prompt, params managed at runtime via flags)
-- `generate_traffic.py` — load generator to produce monitoring data for LD dashboards
-- **Cached LLM client factory** — lands with the AI Configs work, since the cache key depends on flag-controlled fields
+Python 3.12 · MCP Python SDK (`MCPServer`) · Anthropic Claude · FastAPI · Pydantic · structlog
