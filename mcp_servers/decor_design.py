@@ -9,6 +9,7 @@ from __future__ import annotations
 from mcp.server import MCPServer
 
 from app.catalog import get_product, search_products
+from app import store
 
 server = MCPServer(
     name="decor-design",
@@ -58,6 +59,15 @@ def catalog_sku(sku: str) -> dict:
     if product is None:
         return {"error": "unknown_sku", "sku": sku}
     return product.as_dict()
+
+
+@server.resource(
+    "project://{context_key}",
+    mime_type="application/json",
+    description="Read the durable design project for this client. Chat history is not the source of truth.",
+)
+def project_resource(context_key: str) -> dict:
+    return store.snapshot(context_key)
 
 
 if __name__ == "__main__":

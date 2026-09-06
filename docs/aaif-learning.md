@@ -79,3 +79,9 @@ The test in [`test_mcp_catalog.py`](../test_mcp_catalog.py) now does `call_tool`
 - `DesignProject.as_public_dict()` — the JSON a `project://` resource will return. No photo bytes, no internals.
 
 `add_spec` calls `get_product`. Unknown SKUs raise. The world still refuses hallucinations before MCP wraps it.
+
+## Slice: design project as an MCP resource
+
+**Why `project://{context_key}` is a resource, not a tool.** The host should be able to load the current job *without* asking the model to “please fetch state.” That is `resources/read`. The model may still *change* the project through tools. Read = application-controlled. Write = model-controlled, with human gates later.
+
+**The new block** in [`mcp_servers/decor_design.py`](../mcp_servers/decor_design.py): `@server.resource("project://{context_key}")` calls `store.snapshot`. Empty keys create an intake project. Inspector can open `project://demo` with no Claude.

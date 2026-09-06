@@ -7,10 +7,12 @@ import json
 import anyio
 from mcp import Client
 
+from app import store
 from mcp_servers.decor_design import server
 
 
 async def _run() -> None:
+    store.reset()
     async with Client(server) as client:
         listed = await client.list_tools()
         names = [tool.name for tool in listed.tools]
@@ -33,6 +35,11 @@ async def _run() -> None:
 
         missing = await client.read_resource("catalog://sku/FAKE-SOFA")
         assert json.loads(missing.contents[0].text)["error"] == "unknown_sku"
+
+        project = await client.read_resource("project://demo")
+        body = json.loads(project.contents[0].text)
+        assert body["context_key"] == "demo"
+        assert body["status"] == "intake"
 
 
 def test_search_catalog_over_mcp() -> None:
