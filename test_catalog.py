@@ -16,6 +16,11 @@ def test_paint_for_dark_oak() -> None:
     assert any(item.sku == "BM-PAINT-WD" for item in hits)
 
 
+def test_midcentury_matches_hyphenated_style() -> None:
+    hits = search_products(query="12x14 living room midcentury $2000")
+    assert any(item.sku == "ART-SOFA-721" for item in hits)
+
+
 if __name__ == "__main__":
     test_unknown_sku_does_not_exist()
     test_search_returns_real_skus()

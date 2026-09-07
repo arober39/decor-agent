@@ -6,6 +6,7 @@ Search returns these rows only. Unknown SKUs do not exist.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 
@@ -60,6 +61,31 @@ PRODUCTS: tuple[Product, ...] = (
 )
 
 
+_STOP = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "for",
+        "i",
+        "my",
+        "of",
+        "plan",
+        "the",
+        "to",
+        "under",
+        "want",
+        "with",
+        "budget",
+    }
+)
+
+
+def _fold(text: str) -> str:
+    """mid-century and midcentury should hit the same inventory row."""
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+
 def get_product(sku: str) -> Product | None:
     needle = sku.strip().upper()
     for product in PRODUCTS:
@@ -75,7 +101,13 @@ def search_products(
     max_price_cents: int | None = None,
     limit: int = 5,
 ) -> list[Product]:
-    tokens = [tok for tok in query.lower().split() if tok]
+    tokens = []
+    for tok in query.lower().replace("-", " ").split():
+        if tok in _STOP or re.fullmatch(r"\d+(x\d+)?", tok):
+            continue
+        folded = _fold(tok)
+        if folded:
+            tokens.append(folded)
     scored: list[tuple[int, Product]] = []
     for product in PRODUCTS:
         if category and product.category != category.lower():
@@ -96,9 +128,10 @@ def search_products(
                 *product.tags,
             ]
         )
+        folded_hay = _fold(haystack)
         score = 1
         for token in tokens:
-            if token in haystack:
+            if token in folded_hay:
                 score += 3
         if tokens and score == 1:
             continue
