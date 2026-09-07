@@ -133,6 +133,7 @@ LOG_LEVEL=WARNING python test_agent.py
 | Variable | Default | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | _required for chat_ | Claude API key (not required for Inspector or MCP unit tests) |
+| `ANTHROPIC_WORKSPACE_ID` | `""` | Required if the key is not scoped to one Anthropic workspace |
 | `LD_SDK_KEY` | `""` | LaunchDarkly server SDK key (unused for the MCP loop) |
 | `LOG_LEVEL` | `INFO` | structlog level |
 | `ENVIRONMENT` | `development` | Console vs JSON logs |

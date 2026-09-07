@@ -155,3 +155,11 @@ If this panel only showed the last assistant paragraph, we would be back to a wr
 The first project-panel markup shipped, but the stylesheet the browser already had cached was the old single-column chat CSS. `.workspace` and `.project-panel` never applied, so `project://` rendered as bare headings under the chat card. That made the resource look like leftover page copy instead of the job.
 
 Cache-bust `styles.css` and give the panel the same card treatment as chat. Side-by-side on a wide window; stacked cards on a narrow one. Still a view of `project://`, not a second transcript.
+
+## Slice: Anthropic workspace header
+
+**Not Claude Code.** The 500 after the loop fix was the browser hitting `/api/chat`. The host reached Claude. Anthropic returned 400: the API key is not scoped to a workspace, so the request must send `anthropic-workspace-id`.
+
+`.env` already had `ANTHROPIC_WORKSPACE_ID`. Settings used `extra="ignore"`, so the host never read it, and `ChatAnthropic` never sent the header. Org keys need that header. Personal scoped keys do not.
+
+[`app/llm.py`](../app/llm.py) `workspace_headers` attaches it when the setting is non-empty. MCP did not change. This is how the host talks to the model, not how it talks to `decor-design`.

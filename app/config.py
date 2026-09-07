@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     )
 
     anthropic_api_key: str = Field(validation_alias="ANTHROPIC_API_KEY")
+    anthropic_workspace_id: str = Field(
+        default="",
+        validation_alias="ANTHROPIC_WORKSPACE_ID",
+    )
     ld_sdk_key: str = Field(default="", validation_alias="LD_SDK_KEY")
     ld_api_token: str = Field(default="", validation_alias="LAUNCHDARKLY_API_TOKEN")
     ld_project_key: str = Field(
