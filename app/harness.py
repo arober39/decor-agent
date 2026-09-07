@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.flags import (
     AIConfigDefault,
     build_context,
+    current_user_tier,
     get_completion_config,
     set_current_context_key,
 )
@@ -28,6 +29,14 @@ log = get_logger(__name__)
 # search_catalog is read-only. The other two change the project; we still
 # execute them, then stop after request_approval so a human can commit.
 MUTATING_TOOLS = frozenset({"update_project", "request_approval"})
+
+# LaunchDarkly still ships the old specialist-router prompt. That prompt
+# tells the model to invent IKEA prices. The job lives here until those
+# AI Configs are rewritten for MCP.
+TIER_NOTES = {
+    "free": "Prefer lower-priced catalog rows that still fit the brief.",
+    "premium": "Prefer higher-end catalog rows when the budget holds.",
+}
 
 
 def _schema_dict(schema: Any) -> dict:
@@ -139,8 +148,16 @@ async def _run(message: str, context_key: str) -> dict:
 
         for iteration in range(1, settings.max_agent_iterations + 1):
             project = await _read_project(client, context_key)
+            if cfg.system_prompt.strip() != AGENT_SYSTEM_PROMPT.strip():
+                log.info(
+                    "harness.host_job_prompt",
+                    reason="launchdarkly_prompt_is_pre_mcp_wrapper",
+                    ld_config=cfg.config_key,
+                )
+            tier_note = TIER_NOTES.get(current_user_tier() or "", "")
             system = (
-                f"{cfg.system_prompt}\n\n"
+                f"{AGENT_SYSTEM_PROMPT}\n"
+                f"{tier_note}\n\n"
                 f"## Current design project (`project://{context_key}`)\n"
                 f"{json.dumps(project, indent=2)}"
             )

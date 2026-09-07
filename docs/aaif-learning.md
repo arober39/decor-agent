@@ -169,3 +169,13 @@ Cache-bust `styles.css` and give the panel the same card treatment as chat. Side
 LaunchDarkly `decor-agent-main` was already `Anthropic.claude-sonnet-5`. That ID is current (retirement not sooner than June 2027). The host fallback was still `claude-sonnet-4-20250514`, a May 2025 snapshot.
 
 Sonnet 5 rejects non-default `temperature` and turns adaptive thinking on unless you disable it. The client omits sampling and sets `thinking: disabled` so a 1024-token tool loop is not eaten by hidden reasoning. MCP tools and resources did not change.
+
+## Slice: host job prompt beats the LaunchDarkly wrapper
+
+A living-room job came back as invented IKEA Kivik / Article Sven prices. The catalog already has `IKE-SOFA-KL1` and `ART-SOFA-721`. The model said inventory was empty and wrote a shopping list from weights.
+
+**Why.** `get_completion_config("decor-agent-main")` still returns the old specialist-router system prompt (`style_advisor`, name Benjamin Moore from memory, budget-conscious IKEA/Target/Wayfair). The host bound MCP tools, then handed the model instructions that describe tools that do not exist. That is a wrapper wearing a `tools/list`.
+
+**What we did.** The harness always uses [`AGENT_SYSTEM_PROMPT`](../app/prompts.py). LaunchDarkly still picks the model. It does not get to write the job. A free/premium line may prefer cheaper or pricier *catalog* rows. It may not invent brands.
+
+Updating the LaunchDarkly messages is later. Until then the host owns the job.
