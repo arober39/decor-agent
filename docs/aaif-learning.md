@@ -194,7 +194,9 @@ The chat named Sven / Seno / Arca. The side panel stayed Intake. `renderProject`
 
 She had searched the catalog, then answered from those rows, and skipped a successful `update_project` (or called it without `room_name` / `budget_dollars`). The resource never changed.
 
-The host now fills omitted job facts on `tools/call`, and if `spec_list` is still empty it persists budget, room, brief, and named search hits over MCP. Same protocol. The panel is the resource.
+The host now fills omitted job facts on `tools/call`, then always persists budget, room, brief, and named catalog rows over MCP. The panel also refetches `GET /api/project` so it reads the resource, not only the chat payload.
+
+Catalog-only is the default job. The user should not have to say "use SKUs only."
 
 ## Slice: catalog search folds hyphens
 

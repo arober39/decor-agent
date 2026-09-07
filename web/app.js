@@ -134,6 +134,14 @@ form.addEventListener("submit", async (event) => {
 
     hideTypingIndicator();
     renderProject(payload.project);
+    try {
+      const projectRes = await fetch(`/api/project?context_key=${encodeURIComponent(contextKey)}`);
+      if (projectRes.ok) {
+        renderProject(await projectRes.json());
+      }
+    } catch {
+      // Chat payload.project is the fallback if the resource read fails.
+    }
     appendMessage("bot", payload.response || "No response returned.");
   } catch (error) {
     hideTypingIndicator();

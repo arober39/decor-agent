@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from app.catalog import get_product
+from app.catalog import PRODUCTS, get_product
 
 import anyio
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -152,7 +152,8 @@ def search_skus_from_messages(messages: list) -> list[str]:
 def skus_named_in_text(text: str, skus: list[str]) -> list[str]:
     named: list[str] = []
     blob = text.lower()
-    for sku in skus:
+    candidates = skus or [product.sku for product in PRODUCTS]
+    for sku in candidates:
         product = get_product(sku)
         if product is None:
             continue
@@ -365,14 +366,10 @@ async def _run(message: str, context_key: str) -> dict:
         else:
             stop_reason = "max_iterations"
 
-        project = await _read_project(client, context_key)
         commentary = _final_text(messages)
-        if not (project.get("spec_list") or []) and (
-            search_skus_from_messages(messages) or parse_job_facts(message)
-        ):
-            project = await persist_talked_about_project(
-                client, context_key, message, messages, commentary
-            )
+        project = await persist_talked_about_project(
+            client, context_key, message, messages, commentary
+        )
 
     routed_to = tool_calls_made[0] if tool_calls_made else "direct"
     metadata = {

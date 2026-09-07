@@ -94,6 +94,13 @@ def test_named_skus_come_from_search_hits() -> None:
     assert found == ["ART-SOFA-721"]
     named = skus_named_in_text("The Sven 72-inch sofa anchors the room.", found)
     assert named == ["ART-SOFA-721"]
+    from_reply_only = skus_named_in_text(
+        "Sven 72-inch sofa, Seno 48-inch round coffee table, Arca floor lamp.",
+        [],
+    )
+    assert "ART-SOFA-721" in from_reply_only
+    assert "ART-COF-48R" in from_reply_only
+    assert "ART-LAMP-ARC" in from_reply_only
 
 
 def test_persist_writes_named_search_hits() -> None:
