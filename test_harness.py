@@ -5,8 +5,13 @@ from app.harness import (
     bindings_from_mcp_tools,
     commentary_from_project,
     inject_context_key,
+    inject_job_facts,
+    parse_job_facts,
+    persist_talked_about_project,
     run_agent,
     run_agent_async,
+    search_skus_from_messages,
+    skus_named_in_text,
 )
 from app import store
 from mcp import Client
@@ -53,6 +58,69 @@ def test_commentary_from_project_names_catalog_rows() -> None:
     )
     assert "ART-SOFA-721" in text
     assert "Sven" in text
+
+
+def test_parse_job_facts_from_demo_query() -> None:
+    facts = parse_job_facts(
+        "Plan a 12x14 living room with a $2000 budget. Keep it mid-century."
+    )
+    assert facts["budget_dollars"] == 2000
+    assert facts["width_ft"] == 12
+    assert facts["length_ft"] == 14
+    assert facts["room_name"] == "living room"
+    assert facts["style_preferences"] == "mid-century"
+
+
+def test_inject_job_facts_fills_omitted_budget() -> None:
+    args = inject_job_facts(
+        "update_project",
+        {"action": "set_budget"},
+        "job-1",
+        "12x14 living room, $2000",
+    )
+    assert args["budget_dollars"] == 2000
+    assert args["context_key"] == "job-1"
+
+
+def test_named_skus_come_from_search_hits() -> None:
+    messages = [
+        ToolMessage(
+            content='{"matches": [{"sku": "ART-SOFA-721", "name": "Sven 72-inch sofa"}]}',
+            tool_call_id="1",
+            name="search_catalog",
+        )
+    ]
+    found = search_skus_from_messages(messages)
+    assert found == ["ART-SOFA-721"]
+    named = skus_named_in_text("The Sven 72-inch sofa anchors the room.", found)
+    assert named == ["ART-SOFA-721"]
+
+
+def test_persist_writes_named_search_hits() -> None:
+    store.reset()
+
+    async def inner() -> None:
+        async with Client(server) as client:
+            messages = [
+                ToolMessage(
+                    content='{"matches": [{"sku": "ART-SOFA-721", "name": "Sven 72-inch sofa"}]}',
+                    tool_call_id="1",
+                    name="search_catalog",
+                )
+            ]
+            project = await persist_talked_about_project(
+                client,
+                "panel-1",
+                "Plan a 12x14 living room with a $2000 budget. Keep it mid-century.",
+                messages,
+                "The Sven 72-inch sofa anchors the room.",
+            )
+            assert project["budget"]["total_cents"] == 200000
+            assert "living room" in project["rooms"]
+            assert project["brief"]["style_preferences"] == "mid-century"
+            assert project["spec_list"][0]["sku"] == "ART-SOFA-721"
+
+    anyio.run(inner)
 
 
 def test_inject_context_key() -> None:
@@ -114,6 +182,14 @@ if __name__ == "__main__":
     print("PASS test_final_text_empty_when_only_tools")
     test_commentary_from_project_names_catalog_rows()
     print("PASS test_commentary_from_project_names_catalog_rows")
+    test_parse_job_facts_from_demo_query()
+    print("PASS test_parse_job_facts_from_demo_query")
+    test_inject_job_facts_fills_omitted_budget()
+    print("PASS test_inject_job_facts_fills_omitted_budget")
+    test_named_skus_come_from_search_hits()
+    print("PASS test_named_skus_come_from_search_hits")
+    test_persist_writes_named_search_hits()
+    print("PASS test_persist_writes_named_search_hits")
     test_inject_context_key()
     print("PASS test_inject_context_key")
     test_bindings_come_from_tools_list()

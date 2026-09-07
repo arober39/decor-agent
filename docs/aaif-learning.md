@@ -188,6 +188,14 @@ The UI showed "No response returned." `/api/chat` was 200. `response` was `""`. 
 
 **Fix.** Read text blocks even on tool-call turns. If there is still no text, the host writes one sentence from `project://` (real SKUs only).
 
+## Slice: host writes project:// when the model only talks
+
+The chat named Sven / Seno / Arca. The side panel stayed Intake. `renderProject` only reads `payload.project`. Chat text is not the database.
+
+She had searched the catalog, then answered from those rows, and skipped a successful `update_project` (or called it without `room_name` / `budget_dollars`). The resource never changed.
+
+The host now fills omitted job facts on `tools/call`, and if `spec_list` is still empty it persists budget, room, brief, and named search hits over MCP. Same protocol. The panel is the resource.
+
 ## Slice: catalog search folds hyphens
 
 A brief like "12x14 living room midcentury $2000" used to miss `ART-SOFA-721` because the row says `mid-century` and `12x14` is not a product field. Search now folds hyphens (`midcentury` = `mid-century`) and drops dimensions and stopwords. Still no invented rows. Empty result means empty inventory.

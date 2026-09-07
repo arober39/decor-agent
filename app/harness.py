@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
+
+from app.catalog import get_product
 
 import anyio
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -81,6 +84,138 @@ def inject_context_key(name: str, args: dict, context_key: str) -> dict:
     if name in {"update_project", "request_approval"} and "context_key" not in filled:
         filled["context_key"] = context_key
     return filled
+
+
+def parse_job_facts(message: str) -> dict:
+    """Facts the host already knows from this turn. Not a model guess."""
+    facts: dict[str, Any] = {}
+    money = re.search(r"\$\s*(\d+(?:,\d{3})*(?:\.\d+)?)", message)
+    if money:
+        facts["budget_dollars"] = float(money.group(1).replace(",", ""))
+    dims = re.search(r"(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)", message, re.I)
+    if dims:
+        facts["width_ft"] = float(dims.group(1))
+        facts["length_ft"] = float(dims.group(2))
+    lower = message.lower()
+    for room in ("living", "bedroom", "kitchen", "dining", "bathroom", "office"):
+        if room in lower:
+            facts["room_type"] = room
+            facts["room_name"] = room if room in {"kitchen", "office"} else f"{room} room"
+            break
+    if "mid-century" in lower or "midcentury" in lower:
+        facts["style_preferences"] = "mid-century"
+    return facts
+
+
+def inject_job_facts(name: str, args: dict, context_key: str, user_message: str) -> dict:
+    filled = inject_context_key(name, args, context_key)
+    if name != "update_project":
+        return filled
+    facts = parse_job_facts(user_message)
+    action = filled.get("action")
+    if action == "set_budget" and filled.get("budget_dollars") is None and "budget_dollars" in facts:
+        filled["budget_dollars"] = facts["budget_dollars"]
+    if action == "upsert_room":
+        if not str(filled.get("room_name") or "").strip() and facts.get("room_name"):
+            filled["room_name"] = facts["room_name"]
+        if filled.get("width_ft") is None and "width_ft" in facts:
+            filled["width_ft"] = facts["width_ft"]
+        if filled.get("length_ft") is None and "length_ft" in facts:
+            filled["length_ft"] = facts["length_ft"]
+        if not filled.get("room_type") and facts.get("room_type"):
+            filled["room_type"] = facts["room_type"]
+    if action == "set_brief" and not filled.get("style_preferences") and facts.get("style_preferences"):
+        filled["style_preferences"] = facts["style_preferences"]
+    return filled
+
+
+def search_skus_from_messages(messages: list) -> list[str]:
+    seen: list[str] = []
+    for msg in messages:
+        if not isinstance(msg, ToolMessage):
+            continue
+        if getattr(msg, "name", "") != "search_catalog":
+            continue
+        try:
+            payload = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        for row in payload.get("matches") or []:
+            sku = (row or {}).get("sku")
+            if sku and sku not in seen:
+                seen.append(sku)
+    return seen
+
+
+def skus_named_in_text(text: str, skus: list[str]) -> list[str]:
+    named: list[str] = []
+    blob = text.lower()
+    for sku in skus:
+        product = get_product(sku)
+        if product is None:
+            continue
+        if sku.lower() in blob or product.name.lower() in blob:
+            named.append(sku)
+    return named
+
+
+async def persist_talked_about_project(
+    client: Client,
+    context_key: str,
+    user_message: str,
+    messages: list,
+    commentary: str,
+) -> dict:
+    """Write project:// from this turn when the model searched but forgot to persist."""
+    facts = parse_job_facts(user_message)
+    if facts.get("budget_dollars") is not None:
+        await client.call_tool(
+            "update_project",
+            {
+                "context_key": context_key,
+                "action": "set_budget",
+                "budget_dollars": facts["budget_dollars"],
+            },
+        )
+    if facts.get("room_name"):
+        await client.call_tool(
+            "update_project",
+            {
+                "context_key": context_key,
+                "action": "upsert_room",
+                "room_name": facts["room_name"],
+                "room_type": facts.get("room_type") or "living",
+                "width_ft": facts.get("width_ft"),
+                "length_ft": facts.get("length_ft"),
+            },
+        )
+    if facts.get("style_preferences"):
+        await client.call_tool(
+            "update_project",
+            {
+                "context_key": context_key,
+                "action": "set_brief",
+                "style_preferences": facts["style_preferences"],
+            },
+        )
+    found = search_skus_from_messages(messages)
+    to_add = skus_named_in_text(commentary, found) or found[:4]
+    room = facts.get("room_name") or "living room"
+    for sku in to_add:
+        await client.call_tool(
+            "update_project",
+            {
+                "context_key": context_key,
+                "action": "add_spec",
+                "sku": sku,
+                "room_name": room,
+            },
+        )
+    if to_add:
+        log.info("harness.persisted_project", context_key=context_key, skus=to_add)
+    return await _read_project(client, context_key)
 
 
 def _content_text(content: Any) -> str:
@@ -162,6 +297,7 @@ async def _run(message: str, context_key: str) -> dict:
 
     tool_calls_made: list[str] = []
     stop_reason = "direct"
+    commentary = ""
 
     async with Client(server) as client:
         listed = await client.list_tools()
@@ -209,7 +345,9 @@ async def _run(message: str, context_key: str) -> dict:
 
             for call in calls:
                 name = call["name"]
-                args = inject_context_key(name, call.get("args") or {}, context_key)
+                args = inject_job_facts(
+                    name, call.get("args") or {}, context_key, message
+                )
                 log.info("harness.tools_call", tool=name, iteration=iteration)
                 result = await client.call_tool(name, args)
                 tool_calls_made.append(name)
@@ -228,6 +366,13 @@ async def _run(message: str, context_key: str) -> dict:
             stop_reason = "max_iterations"
 
         project = await _read_project(client, context_key)
+        commentary = _final_text(messages)
+        if not (project.get("spec_list") or []) and (
+            search_skus_from_messages(messages) or parse_job_facts(message)
+        ):
+            project = await persist_talked_about_project(
+                client, context_key, message, messages, commentary
+            )
 
     routed_to = tool_calls_made[0] if tool_calls_made else "direct"
     metadata = {
@@ -244,7 +389,7 @@ async def _run(message: str, context_key: str) -> dict:
         stop_reason=stop_reason,
         tools=tool_calls_made,
     )
-    response = _final_text(messages) or commentary_from_project(project)
+    response = commentary or commentary_from_project(project)
     return {
         "response": response,
         "metadata": metadata,
