@@ -163,3 +163,9 @@ Cache-bust `styles.css` and give the panel the same card treatment as chat. Side
 `.env` already had `ANTHROPIC_WORKSPACE_ID`. Settings used `extra="ignore"`, so the host never read it, and `ChatAnthropic` never sent the header. Org keys need that header. Personal scoped keys do not.
 
 [`app/llm.py`](../app/llm.py) `workspace_headers` attaches it when the setting is non-empty. MCP did not change. This is how the host talks to the model, not how it talks to `decor-design`.
+
+## Slice: default model is Claude Sonnet 5
+
+LaunchDarkly `decor-agent-main` was already `Anthropic.claude-sonnet-5`. That ID is current (retirement not sooner than June 2027). The host fallback was still `claude-sonnet-4-20250514`, a May 2025 snapshot.
+
+Sonnet 5 rejects non-default `temperature` and turns adaptive thinking on unless you disable it. The client omits sampling and sets `thinking: disabled` so a 1024-token tool loop is not eaten by hidden reasoning. MCP tools and resources did not change.

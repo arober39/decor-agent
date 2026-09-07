@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     environment: str = Field(default="development", validation_alias="ENVIRONMENT")
 
-    default_model: str = "claude-sonnet-4-20250514"
+    default_model: str = "claude-sonnet-5"
     max_tokens: int = 1024
     max_input_length: int = 2000
     max_retries: int = 2

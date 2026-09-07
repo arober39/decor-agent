@@ -154,4 +154,4 @@ Temporal (API World durable-workflow demo) lives on [`temporal-api-world`](https
 
 ## Tech stack
 
-Python 3.12 · MCP Python SDK (`MCPServer`) · Anthropic Claude · FastAPI · Pydantic · structlog
+Python 3.12 · MCP Python SDK (`MCPServer`) · Anthropic Claude Sonnet 5 · FastAPI · Pydantic · structlog
