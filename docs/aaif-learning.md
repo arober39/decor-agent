@@ -141,3 +141,11 @@ That is human consent. `request_approval` is the ask. These routes are the answe
 The right-hand panel is a *view of `project://`*, not a second chat. After each `/api/chat` the browser renders `payload.project`. Approve / Reject hit the host routes that call `store.approve` / `store.reject`. The model never sees those buttons as tools.
 
 If this panel only showed the last assistant paragraph, we would be back to a wrapper. The artifact is the spec list.
+
+## Slice: harness uses the host event loop
+
+**The bug.** `anyio.run()` starts an event loop. FastAPI / uvicorn already has one. `/api/chat` is `async` and called `run_agent()`, which called `anyio.run(_run)`. Python refused: `Already running asyncio in this thread`. The UI showed a generic 500. Inspector and `python test_harness.py` still worked — those start their own loop.
+
+**The split.** `run_agent_async` is what the host awaits. `run_agent` stays a sync wrapper for tests. The protocol did not change. Same `tools/list` / `tools/call` / `resources/read`. Only who owns the loop.
+
+**What would still be a wrapper.** Catching the RuntimeError and retrying in a thread. That hides the host/client relationship. The host *is* the loop.

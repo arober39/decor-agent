@@ -207,6 +207,12 @@ async def _run(message: str, context_key: str) -> dict:
     }
 
 
-def run_agent(message: str, context_key: str = "anonymous") -> dict:
+async def run_agent_async(message: str, context_key: str = "anonymous") -> dict:
+    """Host entry for FastAPI. Uses the already-running asyncio loop."""
     log.info("run_agent.start", context_key=context_key, message_len=len(message))
-    return anyio.run(_run, message, context_key)
+    return await _run(message, context_key)
+
+
+def run_agent(message: str, context_key: str = "anonymous") -> dict:
+    """Sync wrapper for tests and scripts. Do not call from an async route."""
+    return anyio.run(run_agent_async, message, context_key)

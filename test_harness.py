@@ -1,4 +1,9 @@
-from app.harness import bindings_from_mcp_tools, inject_context_key, run_agent
+from app.harness import (
+    bindings_from_mcp_tools,
+    inject_context_key,
+    run_agent,
+    run_agent_async,
+)
 from app import store
 from mcp import Client
 from mcp_servers.decor_design import server
@@ -38,6 +43,32 @@ def test_bindings_come_from_tools_list() -> None:
     anyio.run(_list_bindings)
 
 
+def test_async_entry_works_inside_running_loop() -> None:
+    """FastAPI already has an event loop. anyio.run() would raise there."""
+
+    async def inner() -> dict:
+        return await run_agent_async("   ", "guard-nested-loop")
+
+    out = anyio.run(inner)
+    assert out["metadata"]["routed_to"] == "rejected"
+    assert out["response"]
+
+
+def test_chat_route_does_not_start_a_second_loop() -> None:
+    from fastapi.testclient import TestClient
+
+    from server import app
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/chat",
+        json={"message": "   ", "context_key": "guard-http-loop"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["metadata"]["routed_to"] == "rejected"
+
+
 if __name__ == "__main__":
     test_empty_message_rejected()
     print("PASS test_empty_message_rejected")
@@ -47,3 +78,7 @@ if __name__ == "__main__":
     print("PASS test_inject_context_key")
     test_bindings_come_from_tools_list()
     print("PASS test_bindings_come_from_tools_list")
+    test_async_entry_works_inside_running_loop()
+    print("PASS test_async_entry_works_inside_running_loop")
+    test_chat_route_does_not_start_a_second_loop()
+    print("PASS test_chat_route_does_not_start_a_second_loop")

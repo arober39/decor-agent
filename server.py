@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.flags import build_context, get_flag, set_current_user_tier
-from app.harness import run_agent
+from app.harness import run_agent_async
 from app.logging import configure_logging, get_logger
 from app.project import ApprovalKind
 from app import store
@@ -169,7 +169,7 @@ async def chat(req: ChatRequest) -> JSONResponse:
         return JSONResponse(status_code=200, content=body.model_dump())
 
     try:
-        result = run_agent(req.message, context_key=context_key)
+        result = await run_agent_async(req.message, context_key=context_key)
     except Exception as exc:
         log.error(
             "chat.error",
