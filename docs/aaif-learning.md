@@ -180,6 +180,14 @@ A living-room job came back as invented IKEA Kivik / Article Sven prices. The ca
 
 Updating the LaunchDarkly messages is later. Until then the host owns the job.
 
+## Slice: chat text from tool-call turns
+
+The UI showed "No response returned." `/api/chat` was 200. `response` was `""`. The browser treats an empty string as missing.
+
+**Cause.** `_final_text` skipped any `AIMessage` that also had `tool_calls`. A live Sonnet 5 turn is mixed: a short preamble plus `update_project` / `search_catalog`. That preamble was thrown away. If the loop then stopped on `request_approval` or `max_iterations`, there was no later text-only message. The host returned silence. The project panel can still be empty on that same turn if `update_project` omitted `room_name` or `budget_dollars` — that is a separate miss.
+
+**Fix.** Read text blocks even on tool-call turns. If there is still no text, the host writes one sentence from `project://` (real SKUs only).
+
 ## Slice: catalog search folds hyphens
 
 A brief like "12x14 living room midcentury $2000" used to miss `ART-SOFA-721` because the row says `mid-century` and `12x14` is not a product field. Search now folds hyphens (`midcentury` = `mid-century`) and drops dimensions and stopwords. Still no invented rows. Empty result means empty inventory.

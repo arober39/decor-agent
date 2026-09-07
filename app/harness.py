@@ -83,17 +83,44 @@ def inject_context_key(name: str, args: dict, context_key: str) -> dict:
     return filled
 
 
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        bits: list[str] = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type", "text") == "text":
+                bits.append(part.get("text") or "")
+            elif hasattr(part, "text"):
+                bits.append(getattr(part, "text") or "")
+        return "".join(bits).strip()
+    return ""
+
+
 def _final_text(messages: list) -> str:
-    for msg in reversed(messages):
-        if isinstance(msg, AIMessage) and not (getattr(msg, "tool_calls", []) or []):
-            content = msg.content
-            if isinstance(content, str):
-                return content
-            if isinstance(content, list):
-                return "".join(
-                    part.get("text", "") for part in content if isinstance(part, dict)
-                )
-            return str(content)
+    """Last non-empty model text, including preambles on tool-call turns."""
+    texts: list[str] = []
+    for msg in messages:
+        if not isinstance(msg, AIMessage):
+            continue
+        text = _content_text(msg.content)
+        if text:
+            texts.append(text)
+    return texts[-1] if texts else ""
+
+
+def commentary_from_project(project: dict) -> str:
+    """Host fallback when the model only emitted tool calls."""
+    specs = project.get("spec_list") or []
+    if specs:
+        names = ", ".join(
+            f"{item.get('name')} ({item.get('sku')})" for item in specs
+        )
+        return f"Draft spec is on the project: {names}. Approve when you are ready."
+    budget = (project.get("budget") or {}).get("total_cents")
+    rooms = project.get("rooms") or {}
+    if budget or rooms:
+        return "The project is updated. Check the panel — I will keep sourcing from the catalog."
     return ""
 
 
@@ -217,8 +244,9 @@ async def _run(message: str, context_key: str) -> dict:
         stop_reason=stop_reason,
         tools=tool_calls_made,
     )
+    response = _final_text(messages) or commentary_from_project(project)
     return {
-        "response": _final_text(messages),
+        "response": response,
         "metadata": metadata,
         "project": project,
     }
