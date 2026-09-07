@@ -179,3 +179,7 @@ A living-room job came back as invented IKEA Kivik / Article Sven prices. The ca
 **What we did.** The harness always uses [`AGENT_SYSTEM_PROMPT`](../app/prompts.py). LaunchDarkly still picks the model. It does not get to write the job. A free/premium line may prefer cheaper or pricier *catalog* rows. It may not invent brands.
 
 Updating the LaunchDarkly messages is later. Until then the host owns the job.
+
+## Slice: catalog search folds hyphens
+
+A brief like "12x14 living room midcentury $2000" used to miss `ART-SOFA-721` because the row says `mid-century` and `12x14` is not a product field. Search now folds hyphens (`midcentury` = `mid-century`) and drops dimensions and stopwords. Still no invented rows. Empty result means empty inventory.
