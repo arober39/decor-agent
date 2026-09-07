@@ -149,3 +149,9 @@ If this panel only showed the last assistant paragraph, we would be back to a wr
 **The split.** `run_agent_async` is what the host awaits. `run_agent` stays a sync wrapper for tests. The protocol did not change. Same `tools/list` / `tools/call` / `resources/read`. Only who owns the loop.
 
 **What would still be a wrapper.** Catching the RuntimeError and retrying in a thread. That hides the host/client relationship. The host *is* the loop.
+
+## Slice: project panel is a card beside chat
+
+The first project-panel markup shipped, but the stylesheet the browser already had cached was the old single-column chat CSS. `.workspace` and `.project-panel` never applied, so `project://` rendered as bare headings under the chat card. That made the resource look like leftover page copy instead of the job.
+
+Cache-bust `styles.css` and give the panel the same card treatment as chat. Side-by-side on a wide window; stacked cards on a narrow one. Still a view of `project://`, not a second transcript.
