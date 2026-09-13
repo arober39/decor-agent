@@ -75,3 +75,13 @@ def test_swap_spec_rejects_bathroom_mat_for_living_rug() -> None:
         raise AssertionError("expected bathroom mat rejection")
     except ValueError as exc:
         assert "living" in str(exc)
+
+
+def test_fit_budget_keeps_must_lines() -> None:
+    store.apply_sample_board("fit-1")
+    project = store.fit_budget("fit-1")
+    skus = {item.sku for item in project.spec_list}
+    assert "ART-SOFA-721" in skus
+    assert "RUG-8X10-RST" in skus
+    assert "RUG-BATH-TER" not in skus
+    assert project.over_budget is False

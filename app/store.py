@@ -230,6 +230,51 @@ def swap_spec(context_key: str, sku: str, to_sku: str) -> DesignProject:
     return get_or_create(context_key)
 
 
+def fit_budget(context_key: str) -> DesignProject:
+    """Fit the cap from inventory: drop close lines, else a cheaper same-room SKU."""
+    dropped: list[str] = []
+    for _ in range(12):
+        project = get_or_create(context_key)
+        if not project.over_budget or project.budget_total_cents is None:
+            if dropped:
+                request_approval(
+                    context_key,
+                    "spec",
+                    "Dropped " + ", ".join(dropped) + " to fit the cap.",
+                )
+            else:
+                request_approval(context_key, "spec", "The list already fits the cap.")
+            return project
+        over = project.planned_cents - project.budget_total_cents
+        room = _room_type(context_key)
+        close = [item for item in project.spec_list if item.lane == "close"]
+        close.sort(key=lambda item: item.price_cents)
+        covering = [item for item in close if item.price_cents >= over]
+        if covering:
+            dropped.append(f"{covering[0].name} ({covering[0].sku})")
+            drop_spec(context_key, covering[0].sku)
+            continue
+        swapped = False
+        for item in list(get_or_create(context_key).spec_list):
+            if item.lane != "close":
+                continue
+            for option in cheaper_in_room(item.sku, room):
+                if item.price_cents - option.price_cents >= over:
+                    swap_spec(context_key, item.sku, option.sku)
+                    swapped = True
+                    break
+            if swapped:
+                break
+        if swapped:
+            return get_or_create(context_key)
+        if close:
+            dropped.append(f"{close[0].name} ({close[0].sku})")
+            drop_spec(context_key, close[0].sku)
+            continue
+        break
+    return get_or_create(context_key)
+
+
 def remove_spec(context_key: str, sku: str) -> DesignProject:
     project = get_or_create(context_key)
     project.spec_list = [item for item in project.spec_list if item.sku != sku]
