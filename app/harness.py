@@ -31,7 +31,8 @@ log = get_logger(__name__)
 
 # search_catalog is read-only. The other two change the project; we still
 # execute them, then stop after request_approval so a human can commit.
-MUTATING_TOOLS = frozenset({"update_project", "request_approval"})
+MUTATING_TOOLS = frozenset({"update_project", "request_approval", "apply_board"})
+CONTEXT_TOOLS = frozenset({"update_project", "request_approval", "apply_board"})
 
 # LaunchDarkly still ships the old specialist-router prompt. That prompt
 # tells the model to invent IKEA prices. The job lives here until those
@@ -40,6 +41,26 @@ TIER_NOTES = {
     "free": "Prefer lower-priced catalog rows that still fit the brief.",
     "premium": "Prefer higher-end catalog rows when the budget holds.",
 }
+
+APPLY_BOARD_PHRASES = (
+    "sample board",
+    "map the board",
+    "map sample",
+    "map the sample",
+)
+
+APPLY_BOARD_REFUSAL = {
+    "error": (
+        "apply_board is only for an explicit sample-board ask. "
+        "Search the catalog and update_project add_spec instead."
+    )
+}
+
+
+def asked_for_sample_board(message: str) -> bool:
+    """True only when the user asked to map the sample board, not a room brief."""
+    lower = (message or "").lower()
+    return any(phrase in lower for phrase in APPLY_BOARD_PHRASES)
 
 
 def _schema_dict(schema: Any) -> dict:
@@ -350,9 +371,13 @@ async def _run(message: str, context_key: str) -> dict:
                     name, call.get("args") or {}, context_key, message
                 )
                 log.info("harness.tools_call", tool=name, iteration=iteration)
-                result = await client.call_tool(name, args)
+                if name == "apply_board" and not asked_for_sample_board(message):
+                    payload = APPLY_BOARD_REFUSAL
+                    log.info("harness.apply_board_refused", reason="not_sample_board_ask")
+                else:
+                    result = await client.call_tool(name, args)
+                    payload = parse_mcp_payload(result)
                 tool_calls_made.append(name)
-                payload = parse_mcp_payload(result)
                 messages.append(
                     ToolMessage(
                         content=json.dumps(payload) if not isinstance(payload, str) else payload,

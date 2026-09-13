@@ -1,6 +1,8 @@
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.harness import (
+    asked_for_sample_board,
+
     _final_text,
     bindings_from_mcp_tools,
     commentary_from_project,
@@ -205,3 +207,12 @@ if __name__ == "__main__":
     print("PASS test_async_entry_works_inside_running_loop")
     test_chat_route_does_not_start_a_second_loop()
     print("PASS test_chat_route_does_not_start_a_second_loop")
+
+
+def test_asked_for_sample_board() -> None:
+    assert asked_for_sample_board("Map the sample living-room board.")
+    assert asked_for_sample_board("please map the sample board")
+    assert not asked_for_sample_board(
+        "Plan a 12x14 living room with a $2000 budget. Mid-century, warm woods."
+    )
+    assert not asked_for_sample_board("Small bedroom, $1200. Keep the oak dresser.")
