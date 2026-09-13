@@ -48,3 +48,16 @@ def test_from_board_then_approve() -> None:
     assert done["pending_approval"] is False
     assert all(item["status"] == "committed" for item in done["spec_list"])
     assert done["status"] == "complete"
+
+
+def test_fit_budget_route_drops_the_close_rug() -> None:
+    client = TestClient(app)
+    client.post("/api/project/from-board", json={"context_key": "http-fit"})
+    fitted = client.post("/api/project/fit-budget", json={"context_key": "http-fit"})
+    assert fitted.status_code == 200
+    body = fitted.json()
+    skus = {item["sku"] for item in body["spec_list"]}
+    assert "ART-SOFA-721" in skus
+    assert "RUG-8X10-RST" in skus
+    assert "RUG-BATH-TER" not in skus
+    assert body["budget"]["over_budget"] is False
