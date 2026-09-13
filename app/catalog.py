@@ -1,13 +1,19 @@
-"""Seeded product catalog. No LLM. This is the world, not the agent.
+"""Product catalog loaded from the PIM. No LLM. This is the world, not the agent.
 
 A design agent that names furniture from model weights is guessing.
 Search returns these rows only. Unknown SKUs do not exist.
+Every SKU has a pre-stored photo at /web/images/{sku}.jpg.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
+
+
+_PIM_PATH = Path(__file__).resolve().parent / "pim" / "catalog.json"
 
 
 @dataclass(frozen=True)
@@ -21,6 +27,10 @@ class Product:
     price_cents: int
     color: str
     tags: tuple[str, ...]
+    material: str = ""
+    dimensions: str = ""
+    in_stock: bool = True
+    qty_on_hand: int = 8
 
     def as_dict(self) -> dict:
         return {
@@ -34,31 +44,51 @@ class Product:
             "price_dollars": round(self.price_cents / 100, 2),
             "color": self.color,
             "tags": list(self.tags),
+            "material": self.material,
+            "dimensions": self.dimensions,
+            "in_stock": self.in_stock,
+            "qty_on_hand": self.qty_on_hand,
+            "image_url": catalog_image_url(self.sku),
         }
 
 
-PRODUCTS: tuple[Product, ...] = (
-    Product("ART-SOFA-721", "Sven 72-inch sofa", "Article", "sofa", ("living",), "mid-century", 129900, "charcoal", ("linen", "walnut")),
-    Product("ART-SOFA-84V", "Sven 84-inch velvet sofa", "Article", "sofa", ("living",), "mid-century", 159900, "olive velvet", ("velvet",)),
-    Product("IKE-SOFA-KL1", "KIVIK 3-seat sofa", "IKEA", "sofa", ("living",), "modern", 79900, "gray", ("family",)),
-    Product("ART-CHAIR-LEO", "Leonie accent chair", "Article", "chair", ("living", "bedroom"), "mid-century", 39900, "oatmeal boucle", ("boucle",)),
-    Product("ART-COF-48R", "Seno 48-inch round coffee table", "Article", "table", ("living",), "mid-century", 44900, "walnut", ("walnut", "round")),
-    Product("RUG-8X10-JUT", "Handwoven jute rug 8x10", "Lulu and Georgia", "rug", ("living", "dining", "bedroom"), "natural", 39900, "natural jute", ("jute", "dark oak", "walnut")),
-    Product("BM-PAINT-WD", "Benjamin Moore White Dove", "Benjamin Moore", "paint", ("living", "bedroom", "kitchen", "bathroom"), "classic", 8500, "warm white", ("dark oak", "walnut", "warm")),
-    Product("BM-PAINT-SW", "Benjamin Moore Simply White", "Benjamin Moore", "paint", ("living", "bedroom", "kitchen"), "classic", 8500, "clean white", ("oak",)),
-    Product("IKE-BED-MAL", "MALM queen bed", "IKEA", "bed", ("bedroom",), "modern", 29900, "white oak", ("queen",)),
-    Product("ART-BED-CEN", "Ceni queen bed", "Article", "bed", ("bedroom",), "mid-century", 99900, "walnut", ("queen", "walnut")),
-    Product("IKE-DESK-BEK", "BEKANT desk 63-inch", "IKEA", "desk", ("office", "bedroom"), "modern", 22900, "white / black", ("wfh",)),
-    Product("ART-DESK-ODN", "Odette desk", "Article", "desk", ("office", "bedroom"), "mid-century", 59900, "walnut", ("wfh", "walnut")),
-    Product("ART-LAMP-ARC", "Arca floor lamp", "Article", "lighting", ("living", "office"), "mid-century", 22900, "brass", ("brass",)),
-    Product("IKE-VAN-GOD", "GODMORGON 24-inch vanity", "IKEA", "storage", ("bathroom",), "modern", 24900, "white", ("small-space",)),
-    Product("WSM-MIRR-RND", "Round brass mirror 30-inch", "West Elm", "decor", ("bathroom", "living"), "classic", 19900, "brass", ("small-space",)),
-    Product("RUG-BATH-TER", "Terrazzo bath mat", "Slowdown Studio", "rug", ("bathroom",), "playful", 4900, "speckled", ("terrazzo",)),
-    Product("WSM-DIN-OAK", "Anton oak dining table 72-inch", "West Elm", "table", ("dining",), "organic modern", 89900, "white oak", ("oak",)),
-    Product("ART-STOR-CRD", "Seno credenza", "Article", "storage", ("living", "dining"), "mid-century", 89900, "walnut", ("walnut", "media")),
-    Product("IKE-KITCH-EN", "ENHET wall cabinet", "IKEA", "storage", ("kitchen",), "modern", 8900, "white", ("kitchen",)),
-    Product("WSM-HW-BRS", "Unlacquered brass cabinet pull", "Schoolhouse", "hardware", ("kitchen", "bathroom"), "classic", 1800, "brass", ("farmhouse",)),
-)
+def local_photo(filename: str) -> str:
+    return f"/web/images/{filename}"
+
+
+def catalog_image_url(sku: str) -> str:
+    return local_photo(f"{sku.strip().upper()}.jpg")
+
+
+def _product_from_row(row: dict) -> Product:
+    qty = int(row.get("qty_on_hand", 8))
+    return Product(
+        sku=str(row["sku"]).strip().upper(),
+        name=row["name"],
+        brand=row["brand"],
+        category=row["category"],
+        room_types=tuple(row["room_types"]),
+        style=row["style"],
+        price_cents=int(row["price_cents"]),
+        color=row["color"],
+        tags=tuple(row.get("tags") or ()),
+        material=str(row.get("material") or ""),
+        dimensions=str(row.get("dimensions") or ""),
+        in_stock=bool(row.get("in_stock", qty > 0)),
+        qty_on_hand=qty,
+    )
+
+
+def _load_products() -> tuple[Product, ...]:
+    rows = json.loads(_PIM_PATH.read_text())
+    products = tuple(_product_from_row(row) for row in rows)
+    skus = [product.sku for product in products]
+    if len(skus) != len(set(skus)):
+        raise ValueError("PIM catalog has duplicate SKUs")
+    return products
+
+
+PRODUCTS: tuple[Product, ...] = _load_products()
 
 
 _STOP = frozenset(
@@ -71,6 +101,7 @@ _STOP = frozenset(
         "my",
         "of",
         "plan",
+        "room",
         "the",
         "to",
         "under",
@@ -103,7 +134,10 @@ def search_products(
 ) -> list[Product]:
     tokens = []
     for tok in query.lower().replace("-", " ").split():
-        if tok in _STOP or re.fullmatch(r"\d+(x\d+)?", tok):
+        bare = tok.lstrip("$")
+        if tok in _STOP or bare in _STOP:
+            continue
+        if re.fullmatch(r"\d+(x\d+)?", bare) or re.fullmatch(r"\d+(?:,\d{3})*(?:\.\d+)?", bare):
             continue
         folded = _fold(tok)
         if folded:
@@ -116,25 +150,49 @@ def search_products(
             continue
         if max_price_cents is not None and product.price_cents > max_price_cents:
             continue
-        haystack = " ".join(
-            [
-                product.sku.lower(),
-                product.name.lower(),
-                product.brand.lower(),
-                product.category,
-                product.style,
-                product.color.lower(),
-                *product.room_types,
-                *product.tags,
-            ]
-        )
-        folded_hay = _fold(haystack)
+        exact = {
+            _fold(product.sku),
+            _fold(product.brand),
+            _fold(product.category),
+            _fold(product.style),
+            _fold(product.color),
+            _fold(product.material),
+            _fold(product.dimensions),
+            *(_fold(room) for room in product.room_types),
+            *(_fold(tag) for tag in product.tags),
+        }
+        name_fold = _fold(product.name)
         score = 1
         for token in tokens:
-            if token in folded_hay:
+            if token in exact or token in name_fold:
                 score += 3
         if tokens and score == 1:
             continue
         scored.append((score, product))
     scored.sort(key=lambda pair: (-pair[0], pair[1].price_cents))
     return [product for _, product in scored[: max(1, min(limit, 12))]]
+
+
+def room_key(room: str) -> str:
+    return room.strip().lower().replace(" room", "").replace("room", "").strip() or "living"
+
+
+def cheaper_in_room(sku: str, room_type: str = "") -> list[Product]:
+    """Same category, same room, lower price. Bathroom mats are not living rugs."""
+    product = get_product(sku)
+    if product is None:
+        return []
+    room = room_key(room_type)
+    cheaper: list[Product] = []
+    for other in PRODUCTS:
+        if other.sku == product.sku:
+            continue
+        if other.category != product.category:
+            continue
+        if other.price_cents >= product.price_cents:
+            continue
+        if room and room not in other.room_types:
+            continue
+        cheaper.append(other)
+    cheaper.sort(key=lambda item: item.price_cents)
+    return cheaper
