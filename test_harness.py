@@ -1,14 +1,14 @@
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.harness import (
-    asked_for_sample_board,
-
     _final_text,
+    asked_for_sample_board,
     bindings_from_mcp_tools,
     commentary_from_project,
     inject_context_key,
     inject_job_facts,
     parse_job_facts,
+    parse_revision_intent,
     persist_talked_about_project,
     run_agent,
     run_agent_async,
@@ -117,17 +117,99 @@ def test_persist_writes_named_search_hits() -> None:
                     name="search_catalog",
                 )
             ]
-            project = await persist_talked_about_project(
+            project, note = await persist_talked_about_project(
                 client,
                 "panel-1",
                 "Plan a 12x14 living room with a $2000 budget. Keep it mid-century.",
                 messages,
                 "The Sven 72-inch sofa anchors the room.",
             )
+            assert note is None
             assert project["budget"]["total_cents"] == 200000
             assert "living room" in project["rooms"]
             assert project["brief"]["style_preferences"] == "mid-century"
             assert project["spec_list"][0]["sku"] == "ART-SOFA-721"
+
+    anyio.run(inner)
+
+
+def test_parse_revision_intent_swap_lamp() -> None:
+    intent = parse_revision_intent(
+        "swap the lamp for the brass lamp they have in inventory"
+    )
+    assert intent == {"kind": "swap", "category": "lighting"}
+    assert parse_revision_intent("hello") is None
+
+
+def test_host_swap_keeps_arca_when_it_is_already_the_brass_lamp() -> None:
+    store.reset()
+    store.apply_sample_board("swap-lamp-1")
+    store.reject("swap-lamp-1", "Client rejected the current plan")
+
+    async def inner() -> None:
+        async with Client(server) as client:
+            project, note = await persist_talked_about_project(
+                client,
+                "swap-lamp-1",
+                "swap the lamp for the brass lamp they have in inventory",
+                [],
+                "The spec is $2,376 against a $2,000 budget.",
+            )
+            lighting = [
+                item for item in project["spec_list"] if item["category"] == "lighting"
+            ]
+            assert [item["sku"] for item in lighting] == ["ART-LAMP-ARC"]
+            assert lighting[0]["color"] == "brass"
+            assert project["pending_approval"] is True
+            assert note is not None
+            assert "ART-LAMP-ARC" in note
+            skus = {item["sku"] for item in project["spec_list"]}
+            assert "WSM-HW-BRS" not in skus
+            assert "WSM-MIRR-RND" not in skus
+
+    anyio.run(inner)
+
+
+def test_host_swap_replaces_sofa_when_inventory_has_another() -> None:
+    store.reset()
+    store.add_spec("swap-sofa-1", "ART-SOFA-721", "living room")
+
+    async def inner() -> None:
+        async with Client(server) as client:
+            project, note = await persist_talked_about_project(
+                client,
+                "swap-sofa-1",
+                "swap the sofa for the IKEA KIVIK",
+                [],
+                "",
+            )
+            sofas = [item for item in project["spec_list"] if item["category"] == "sofa"]
+            assert [item["sku"] for item in sofas] == ["IKE-SOFA-KL1"]
+            assert project["pending_approval"] is True
+            assert note is not None
+            assert "IKE-SOFA-KL1" in note
+
+    anyio.run(inner)
+
+
+def test_host_does_not_swap_living_rug_for_bath_mat() -> None:
+    store.reset()
+    store.apply_sample_board("swap-white-rug")
+
+    async def inner() -> None:
+        async with Client(server) as client:
+            project, note = await persist_talked_about_project(
+                client,
+                "swap-white-rug",
+                "swap my initial 8x10 rug for a white one",
+                [],
+                "",
+            )
+            rugs = [item for item in project["spec_list"] if item["category"] == "rug"]
+            assert [item["sku"] for item in rugs] == ["RUG-8X10-IVO"]
+            assert "RUG-BATH-TER" not in {item["sku"] for item in project["spec_list"]}
+            assert note is not None
+            assert "RUG-8X10-IVO" in note
 
     anyio.run(inner)
 
@@ -137,6 +219,17 @@ def test_inject_context_key() -> None:
     assert args["context_key"] == "job-9"
     search = inject_context_key("search_catalog", {"query": "sofa"}, "job-9")
     assert "context_key" not in search
+    board = inject_context_key("apply_board", {}, "job-9")
+    assert board["context_key"] == "job-9"
+
+
+def test_asked_for_sample_board() -> None:
+    assert asked_for_sample_board("Map the sample living-room board.")
+    assert asked_for_sample_board("please map the sample board")
+    assert not asked_for_sample_board(
+        "Plan a 12x14 living room with a $2000 budget. Mid-century, warm woods."
+    )
+    assert not asked_for_sample_board("Small bedroom, $1200. Keep the oak dresser.")
 
 
 async def _list_bindings() -> None:
@@ -145,7 +238,7 @@ async def _list_bindings() -> None:
         listed = await client.list_tools()
         bindings = bindings_from_mcp_tools(listed.tools)
         names = {item["name"] for item in bindings}
-        assert names == {"search_catalog", "update_project", "request_approval"}
+        assert names == {"search_catalog", "update_project", "request_approval", "apply_board"}
         for item in bindings:
             assert "input_schema" in item
 
@@ -199,6 +292,14 @@ if __name__ == "__main__":
     print("PASS test_named_skus_come_from_search_hits")
     test_persist_writes_named_search_hits()
     print("PASS test_persist_writes_named_search_hits")
+    test_parse_revision_intent_swap_lamp()
+    print("PASS test_parse_revision_intent_swap_lamp")
+    test_host_swap_keeps_arca_when_it_is_already_the_brass_lamp()
+    print("PASS test_host_swap_keeps_arca_when_it_is_already_the_brass_lamp")
+    test_host_swap_replaces_sofa_when_inventory_has_another()
+    print("PASS test_host_swap_replaces_sofa_when_inventory_has_another")
+    test_host_does_not_swap_living_rug_for_bath_mat()
+    print("PASS test_host_does_not_swap_living_rug_for_bath_mat")
     test_inject_context_key()
     print("PASS test_inject_context_key")
     test_bindings_come_from_tools_list()
@@ -207,12 +308,3 @@ if __name__ == "__main__":
     print("PASS test_async_entry_works_inside_running_loop")
     test_chat_route_does_not_start_a_second_loop()
     print("PASS test_chat_route_does_not_start_a_second_loop")
-
-
-def test_asked_for_sample_board() -> None:
-    assert asked_for_sample_board("Map the sample living-room board.")
-    assert asked_for_sample_board("please map the sample board")
-    assert not asked_for_sample_board(
-        "Plan a 12x14 living room with a $2000 budget. Mid-century, warm woods."
-    )
-    assert not asked_for_sample_board("Small bedroom, $1200. Keep the oak dresser.")
