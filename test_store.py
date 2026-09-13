@@ -55,3 +55,14 @@ def test_add_spec_rejects_skip_lane() -> None:
         raise AssertionError("expected skip rejection")
     except ValueError as exc:
         assert "skip" in str(exc)
+
+
+def test_apply_sample_board_maps_lanes_and_skips() -> None:
+    project = store.apply_sample_board("board-1")
+    data = project.as_public_dict()
+    lanes = {item.sku: item.lane for item in project.spec_list}
+    assert lanes["ART-SOFA-721"] == "must"
+    assert lanes["RUG-8X10-RST"] == "must"
+    assert project.skipped == []
+    assert data["pending_approval"] is True
+    assert data["budget"]["over_budget"] is True

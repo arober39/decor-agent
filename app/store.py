@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import threading
 
-from app.catalog import get_product
+from app.board import resolve_sample_board
+from app.catalog import cheaper_in_room, get_product
 from app.events import SPEC_APPROVED, SPEC_SAVED, track
-from app.project import ApprovalKind, DesignProject, Room, SpecItem, SpecLane
+from app.project import ApprovalKind, DesignProject, Room, SkippedPin, SpecItem, SpecLane
 
 
 _lock = threading.Lock()
@@ -132,6 +133,62 @@ def add_spec(
         1,
     )
     return project
+
+
+def apply_sample_board(
+    context_key: str,
+    room_name: str = "living room",
+    budget_dollars: float = 2000,
+) -> DesignProject:
+    """Host/MCP entry: curated pins → must/close spec lines + skip list."""
+    upsert_room(context_key, name=room_name, room_type="living")
+    set_budget(context_key, budget_dollars)
+    set_brief(
+        context_key,
+        lifestyle=f"{room_name} from a warm-linen board",
+        style_preferences="warm whites, oak, rust ground",
+    )
+    project = get_or_create(context_key)
+    decisions = resolve_sample_board()
+    project.board_pins = [row["label"] for row in decisions]
+    project.skipped = []
+    for row in decisions:
+        if row["lane"] == "skip" or not row["sku"]:
+            project.skipped.append(SkippedPin(label=row["label"], why=row["why"]))
+            continue
+        add_spec(
+            context_key,
+            row["sku"],
+            room_name,
+            lane=row["lane"],
+            why=row["why"],
+        )
+    project = get_or_create(context_key)
+    if project.over_budget and project.budget_total_cents is not None:
+        over = project.planned_cents - project.budget_total_cents
+        cap = project.budget_total_cents
+        summary = (
+            f"${over / 100:.0f} over the ${cap / 100:.0f} cap. "
+            "Drop an optional line or swap to a cheaper catalog SKU."
+        )
+    else:
+        summary = "Board mapped to catalog. Approve to commit keep and optional lines."
+    request_approval(context_key, "spec", summary)
+    return get_or_create(context_key)
+
+
+def _room_type(context_key: str) -> str:
+    project = get_or_create(context_key)
+    if len(project.rooms) == 1:
+        return next(iter(project.rooms.values())).room_type
+    return "living"
+
+
+def _room_name(context_key: str) -> str:
+    project = get_or_create(context_key)
+    if len(project.rooms) == 1:
+        return next(iter(project.rooms.values())).name
+    return "living room"
 
 
 def remove_spec(context_key: str, sku: str) -> DesignProject:
