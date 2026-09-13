@@ -17,6 +17,9 @@ def test_studio_and_catalog_routes() -> None:
     assert b"Open studio" in home.content
     assert studio.status_code == 200
     assert b"Ask Decora" in studio.content
+    assert b"starter brief" in studio.content
+    assert b"sample board" in studio.content
+    assert b"start-guide" in studio.content
     assert catalog.status_code == 200
     products = catalog.json()["products"]
     assert len(products) == 4
@@ -37,6 +40,8 @@ def test_from_board_then_approve() -> None:
     body = mapped.json()
     assert body["pending_approval"] is True
     assert len(body["spec_list"]) == 6
+    assert body["skipped"] == []
+    assert all(item["sku"] for item in body["spec_list"])
     assert all(item["status"] == "draft" for item in body["spec_list"])
 
     approved = client.post(
@@ -61,3 +66,9 @@ def test_fit_budget_route_drops_the_close_rug() -> None:
     assert "RUG-8X10-RST" in skus
     assert "RUG-BATH-TER" not in skus
     assert body["budget"]["over_budget"] is False
+
+
+if __name__ == "__main__":
+    setup_function()
+    test_from_board_then_approve()
+    print("PASS test_api_project")
