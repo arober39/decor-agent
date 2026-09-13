@@ -264,6 +264,15 @@ def _spec_change(work):
     return None
 
 
+@app.post("/api/project/drop-spec")
+async def drop_spec(req: ProjectRequest) -> JSONResponse:
+    err = _spec_change(lambda: store.drop_spec(req.context_key, req.sku))
+    if err:
+        return err
+    log.info("project.dropped", context_key=req.context_key, sku=req.sku)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
 if __name__ == "__main__":
     import uvicorn
 
