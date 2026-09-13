@@ -8,6 +8,8 @@ from app.logging import get_logger
 
 log = get_logger(__name__)
 
+BOARD_INTAKE_FLAG = "decor-board-intake"
+
 _ld_client = None
 _ai_client = None
 
