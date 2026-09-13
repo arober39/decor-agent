@@ -216,6 +216,15 @@ async def chat(req: ChatRequest) -> JSONResponse:
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
+@app.get("/api/capabilities")
+async def capabilities(context_key: str = "anonymous") -> dict:
+    context = build_context(context_key)
+    return {
+        "board_intake": get_flag(BOARD_INTAKE_FLAG, context, default=True),
+        "sample_board": "living-linen",
+    }
+
+
 @app.get("/api/project")
 async def get_project(context_key: str) -> dict:
     return store.snapshot(context_key)
