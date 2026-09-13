@@ -171,3 +171,28 @@ def search_products(
         scored.append((score, product))
     scored.sort(key=lambda pair: (-pair[0], pair[1].price_cents))
     return [product for _, product in scored[: max(1, min(limit, 12))]]
+
+
+def room_key(room: str) -> str:
+    return room.strip().lower().replace(" room", "").replace("room", "").strip() or "living"
+
+
+def cheaper_in_room(sku: str, room_type: str = "") -> list[Product]:
+    """Same category, same room, lower price. Bathroom mats are not living rugs."""
+    product = get_product(sku)
+    if product is None:
+        return []
+    room = room_key(room_type)
+    cheaper: list[Product] = []
+    for other in PRODUCTS:
+        if other.sku == product.sku:
+            continue
+        if other.category != product.category:
+            continue
+        if other.price_cents >= product.price_cents:
+            continue
+        if room and room not in other.room_types:
+            continue
+        cheaper.append(other)
+    cheaper.sort(key=lambda item: item.price_cents)
+    return cheaper
