@@ -1,0 +1,25 @@
+---
+description: Commit and push after each logical slice
+alwaysApply: true
+---
+
+# Commit and push after each logical slice
+
+After a logical change ships and tests pass, commit it and push to `origin`. Do not wait for a milestone or for the user to ask again.
+
+A good commit:
+
+- Does one thing. The message is one sentence without "and."
+- Still builds and runs.
+- Is safe to undo without taking unrelated work.
+
+Do not batch a night of Studio work into one dump.
+Do not commit secrets (`.env`, keys, credentials).
+Do not force-push `main`.
+
+```bash
+# after tests pass
+git add <files for this slice>
+git commit -m "Add the host shopping list routes."
+git push origin HEAD
+```
