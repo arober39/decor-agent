@@ -275,6 +275,19 @@ def fit_budget(context_key: str) -> DesignProject:
     return get_or_create(context_key)
 
 
+def raise_budget_to_planned(context_key: str) -> DesignProject:
+    project = get_or_create(context_key)
+    if not project.planned_cents:
+        raise ValueError("Nothing planned to raise the cap to")
+    set_budget(context_key, project.planned_cents / 100)
+    request_approval(
+        context_key,
+        "budget",
+        f"Cap raised to ${project.planned_cents / 100:.0f} to match the list.",
+    )
+    return get_or_create(context_key)
+
+
 def remove_spec(context_key: str, sku: str) -> DesignProject:
     project = get_or_create(context_key)
     project.spec_list = [item for item in project.spec_list if item.sku != sku]
