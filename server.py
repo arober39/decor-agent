@@ -230,6 +230,16 @@ async def get_project(context_key: str) -> dict:
     return store.snapshot(context_key)
 
 
+@app.post("/api/project/from-board")
+async def project_from_board(req: ProjectRequest) -> JSONResponse:
+    context = build_context(req.context_key)
+    if not get_flag(BOARD_INTAKE_FLAG, context, default=True):
+        return JSONResponse(status_code=403, content={"detail": "Board intake is off."})
+    store.apply_sample_board(req.context_key)
+    log.info("project.from_board", context_key=req.context_key)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
 @app.post("/api/project/approve")
 async def approve_project(req: ProjectRequest) -> dict:
     store.approve(req.context_key, kind=req.kind)
