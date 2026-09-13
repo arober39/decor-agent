@@ -53,6 +53,8 @@ class ProjectRequest(BaseModel):
     user_tier: Literal["free", "premium"] | None = None
     kind: ApprovalKind | None = None
     reason: str = ""
+    sku: str = ""
+    to_sku: str = ""
 
 
 @asynccontextmanager
@@ -252,6 +254,14 @@ async def reject_project(req: ProjectRequest) -> dict:
     store.reject(req.context_key, reason=req.reason)
     log.info("project.rejected", context_key=req.context_key, reason=req.reason)
     return store.snapshot(req.context_key)
+
+
+def _spec_change(work):
+    try:
+        work()
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+    return None
 
 
 if __name__ == "__main__":
