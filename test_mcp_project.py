@@ -23,6 +23,7 @@ async def _run() -> None:
         listed = await client.list_tools()
         names = [tool.name for tool in listed.tools]
         assert "update_project" in names
+        assert "apply_board" in names
 
         await client.call_tool(
             "update_project",
@@ -75,6 +76,17 @@ async def _run() -> None:
         text = got.messages[0].content.text
         assert "12x14 living room" in text
         assert "2000" in text
+
+        store.reset()
+        mapped = await client.call_tool(
+            "apply_board",
+            {"context_key": "board-mcp", "room_name": "living room", "budget_dollars": 2000},
+        )
+        mapped_body = _text(mapped)
+        assert mapped_body["spec_list"][0]["sku"]
+        assert any(item["lane"] == "close" for item in mapped_body["spec_list"])
+        assert mapped_body["skipped"] == []
+        assert mapped_body["pending_approval"] is True
 
 
 def test_update_project_over_mcp() -> None:
