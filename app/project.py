@@ -76,6 +76,16 @@ class DesignProject(BaseModel):
             return None
         return self.budget_total_cents - self.committed_cents
 
+    @property
+    def planned_cents(self) -> int:
+        return self.committed_cents + self.draft_cents
+
+    @property
+    def over_budget(self) -> bool:
+        if self.budget_total_cents is None:
+            return False
+        return self.planned_cents > self.budget_total_cents
+
     def room_key(self, name: str) -> str:
         return name.strip().lower()
 
@@ -104,6 +114,8 @@ class DesignProject(BaseModel):
                 "committed_cents": self.committed_cents,
                 "draft_cents": self.draft_cents,
                 "remaining_cents": self.remaining_cents,
+                "planned_cents": self.planned_cents,
+                "over_budget": self.over_budget,
             },
             "pending_approval": self.pending_approval,
             "pending_approval_kind": self.pending_approval_kind,
