@@ -7,77 +7,127 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;1,400&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/web/styles.css?v=project-panel" />
+    <link rel="stylesheet" href="/web/site.css?v=page-width" />
   </head>
   <body>
-    <main class="page">
-      <div class="workspace">
-      <section class="chat-shell" aria-label="Decora chat">
-        <div class="shell-header">
-          <p class="eyebrow">Interior Design Assistant</p>
-          <h1>Decora</h1>
-          <p class="subcopy">
-            Decora runs a design job over MCP: catalog SKUs, a durable project, and your approval before anything is committed.
+    <header class="nav">
+      <a class="wordmark" href="/">decora</a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="/" class="current">Home</a>
+        <a href="/studio">Studio</a>
+        <a class="btn btn-dark" href="/studio">Open studio</a>
+      </nav>
+    </header>
+
+    <section class="hero" aria-label="Hero">
+      <img
+        class="hero-photo"
+        src="https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=2200&q=70"
+        alt="Sunlit living room with linen seating and warm wood"
+      />
+      <div class="hero-scrim"></div>
+      <div class="hero-stage">
+        <div class="hero-copy">
+          <h1>Design the room.<br />Shop the spec.</h1>
+          <p>
+            Decora turns a board into a catalog shopping list. Keep, optional, or skip.
+            You approve before anything is committed.
           </p>
+          <a class="btn btn-light" href="/studio">Open studio</a>
         </div>
-
-        <div id="messages" class="messages" role="log" aria-live="polite"></div>
-
-        <form id="chat-form" class="composer">
-          <label for="tier" class="tier-label">Tier</label>
-          <select id="tier" name="tier">
-            <option value="free" selected>Free</option>
-            <option value="premium">Premium</option>
-          </select>
-          <input
-            id="prompt"
-            name="message"
-            type="text"
-            placeholder="Describe the room, budget, and what you want to keep..."
-            autocomplete="off"
-            required
-            maxlength="2000"
-          />
-          <button id="send" type="submit">Send</button>
-        </form>
-      </section>
-
-      <aside class="project-panel" aria-label="Design project">
-        <div class="panel-header">
-          <p class="eyebrow">Project</p>
-          <h2 id="project-status">Intake</h2>
-        </div>
-        <section>
-          <h3>Budget</h3>
-          <p id="project-budget" class="budget-line">Not set</p>
-        </section>
-        <section>
-          <h3>Brief</h3>
-          <p id="project-brief" class="muted">Waiting for a brief.</p>
-        </section>
-        <section>
-          <h3>Rooms</h3>
-          <ul id="project-rooms" class="plain-list"><li class="muted">None yet</li></ul>
-        </section>
-        <section>
-          <h3>Spec list</h3>
-          <ul id="project-specs" class="plain-list"><li class="muted">Empty until catalog SKUs are added.</li></ul>
-        </section>
-        <div id="approval-card" class="approval-card" hidden>
-          <p class="eyebrow">Needs your approval</p>
-          <p id="approval-summary"></p>
-          <div class="approval-actions">
-            <button id="approve-btn" type="button">Approve</button>
-            <button id="reject-btn" type="button" class="ghost">Reject</button>
+        <aside class="phone" aria-hidden="true">
+          <div class="phone-screen">
+            <img
+              src="https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=800&q=60"
+              alt=""
+            />
+            <div class="phone-card">
+              <small>Keep · ART-SOFA-721</small>
+              <strong>Sven 72-inch sofa</strong>
+              $1,299 · talk to Decora
+            </div>
           </div>
-        </div>
-      </aside>
+        </aside>
       </div>
-    </main>
+    </section>
 
-    <script src="/web/app.js?v=project-refetch" defer></script>
+    <section class="section">
+      <h2>A working file, not a chat window.</h2>
+      <p class="section-lead">
+        The board and the list are the product. Decora answers about a pin.
+        Inventory is the seeded catalog we actually have.
+      </p>
+      <div class="pillars">
+        <article>
+          <h3>We read the board</h3>
+          <p>Pins become keep, optional, or skip. If it is not in the catalog, it stays on the board as taste.</p>
+        </article>
+        <article>
+          <h3>Change one line</h3>
+          <p>Swap a rug. Keep the sofa. Ask why a pin is optional. You never start the room over.</p>
+        </article>
+        <article>
+          <h3>Every piece is real</h3>
+          <p>Names, prices, and SKUs come from search. Decora does not invent IKEA from memory.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top: 0">
+      <h2>From the catalog</h2>
+      <p class="section-lead">The living-room board maps to catalog SKUs. Studio will not invent a row.</p>
+      <div id="products" class="products"></div>
+    </section>
+
+    <section class="section">
+      <div class="quotes">
+        <blockquote>
+          “Map the board, then approve the list. That is the job.”
+          <cite>Decora · designer of record</cite>
+        </blockquote>
+        <blockquote>
+          “Skip is not a spend line. If inventory has the pin, it becomes a spec line.”
+          <cite>Haven living · sample board</cite>
+        </blockquote>
+      </div>
+    </section>
+
+    <section class="section faq">
+      <h2>How Decora works</h2>
+      <div class="faq-item open">
+        <button type="button">What do I do in Studio?</button>
+        <p>
+          Open a job, map the sample board or send a brief, then approve the spec.
+          Chat sits under the file. It does not replace it.
+        </p>
+      </div>
+      <div class="faq-item">
+        <button type="button">Are the pieces real?</button>
+        <p>
+          Yes. Only catalog SKUs. If search is empty, inventory is empty. Optional means a substitute, not a guess.
+        </p>
+      </div>
+      <div class="faq-item">
+        <button type="button">Can I change just one thing?</button>
+        <p>
+          Ask Decora about a pin, or reject the spec with a note. Draft lines stay until you approve.
+        </p>
+      </div>
+      <div class="faq-item">
+        <button type="button">What does Approve mean?</button>
+        <p>
+          Host-only commit. Draft becomes the spec of record. Decora cannot mark items purchased.
+        </p>
+      </div>
+    </section>
+
+    <footer class="site-footer">
+      <span>decora</span>
+      <a href="/studio">Open studio</a>
+    </footer>
+    <script src="/web/home.js?v=pim-library" defer></script>
   </body>
 </html>
