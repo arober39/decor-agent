@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Studio · Decora</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/web/site.css?v=board-stay" />
+  </head>
+  <body class="studio-page">
+    <header class="nav">
+      <a class="wordmark" href="/">decora</a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="/">Home</a>
+        <a href="/studio" class="current">Studio</a>
+      </nav>
+    </header>
+
+    <div class="job-bar">
+      <div>
+        <p class="muted" id="project-room">No room yet</p>
+        <h1 id="project-status">Intake</h1>
+      </div>
+      <div class="job-meta">
+        <p id="project-budget" class="budget">Budget not set</p>
+        <div id="budget-meter" class="meter hidden"><span id="budget-fill"></span></div>
+        <div id="project-over" class="budget-over hidden">
+          <p id="project-over-copy" class="budget over">Planned spend is over the cap.</p>
+          <div class="job-actions">
+            <button class="btn btn-ghost" type="button" data-job="fit">Fit the cap</button>
+            <button class="btn btn-ghost" type="button" data-job="raise">Raise the cap</button>
+          </div>
+        </div>
+        <div id="approval-actions" class="job-actions hidden">
+          <button class="btn btn-dark" type="button" data-job="approve">Approve list</button>
+          <button class="btn btn-ghost" type="button" data-job="change">Request changes</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="studio-grid">
+      <section class="panel board-panel" aria-label="Board">
+        <h2>Board</h2>
+        <div id="empty-board" class="empty-board">
+          <div class="starters">
+            <button type="button" class="btn btn-light" id="board-btn">Map sample board</button>
+            <button type="button" class="btn btn-ghost chip" data-brief="Plan a 12x14 living room with a $2000 budget. Mid-century, warm woods.">12×14 living · $2k</button>
+            <button type="button" class="btn btn-ghost chip" data-brief="Small bedroom, $1200. Keep the oak dresser. No pink.">Bedroom · $1.2k</button>
+          </div>
+        </div>
+        <div id="board-grid" class="board-grid hidden"></div>
+        <p id="pin-detail" class="spec-why"></p>
+      </section>
+    </div>
+
+    <div id="start-guide" class="start-guide" aria-label="Three ways to get started">
+      <button type="button" class="start-card" id="start-board">
+        <span class="start-icon" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect x="3" y="5" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+            <rect x="17" y="5" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+            <rect x="3" y="17" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+            <rect x="17" y="17" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </span>
+        <strong>Map sample board</strong>
+        <span>Ready-made list. Six living-room products. $2,000 cap.</span>
+      </button>
+      <div class="start-card start-card-static" id="start-brief">
+        <span class="start-icon" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect x="6" y="4" width="20" height="24" rx="2" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M10 11h12M10 16h12M10 21h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <strong>Tap a starter brief</strong>
+        <span>Example prompt. Then Decora picks catalog products.</span>
+        <span class="start-links">
+          <button type="button" class="chip" data-brief="Plan a 12x14 living room with a $2000 budget. Mid-century, warm woods.">12×14 living · $2k</button>
+          <button type="button" class="chip" data-brief="Small bedroom, $1200. Keep the oak dresser. No pink.">Bedroom · $1.2k</button>
+        </span>
+      </div>
+      <button type="button" class="start-card" id="start-type">
+        <span class="start-icon" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect x="3" y="14" width="26" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M7 18h2M12 18h2M17 18h2M22 18h3M7 22h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M10 10l3-5h6l3 5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <strong>Type in the box</strong>
+        <span>Write the room and budget yourself, then Send.</span>
+      </button>
+    </div>
+
+    <div class="studio-dock">
+    <footer class="ask-dock" aria-label="Ask Decora">
+      <div
+        id="chat-resizer"
+        class="chat-resizer"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Drag to resize chat"
+        tabindex="0"
+      ></div>
+      <div class="ask-tools">
+        <p>Decora</p>
+      </div>
+      <div id="change-panel" class="change-panel hidden">
+        <p>What should Decora change? Approve stays on the list.</p>
+        <form id="change-form" class="composer">
+          <input
+            id="change-input"
+            type="text"
+            placeholder="Swap the lamp, drop the rug, raise the budget…"
+            maxlength="2000"
+            required
+          />
+          <button class="btn btn-dark" type="submit">Send</button>
+          <button class="btn btn-ghost" id="change-cancel" type="button">Cancel</button>
+        </form>
+      </div>
+      <div id="messages" class="thread" role="log" aria-live="polite"></div>
+      <form id="chat-form" class="composer">
+        <textarea
+          id="prompt"
+          name="message"
+          rows="1"
+          placeholder="Room, budget, or a swap — or use the board above"
+          maxlength="2000"
+          required
+        ></textarea>
+        <button id="send" class="btn btn-dark" type="submit">Send</button>
+      </form>
+    </footer>
+
+      <section class="panel list-panel" aria-label="Shopping list">
+        <h2>Shopping list</h2>
+        <p id="project-brief" class="muted">No brief yet. Use a starter chip or tell me the room.</p>
+        <p id="list-note" class="list-note hidden"></p>
+        <div id="list-actions" class="job-actions hidden">
+          <button class="btn btn-dark" type="button" data-job="approve">Approve list</button>
+          <button class="btn btn-ghost" type="button" data-job="change">Request changes</button>
+        </div>
+        <div class="list-scroll">
+          <ul id="project-specs" class="spec-list">
+            <li class="muted">Empty until you map the sample board, tap a starter brief, or ask about a room.</li>
+          </ul>
+          <div id="skipped-section" class="hidden">
+            <h2>Skipped</h2>
+            <ul id="project-skipped" class="plain"></ul>
+          </div>
+          <div id="rejected-section" class="hidden">
+            <h2>Client notes</h2>
+            <ul id="project-rejected" class="plain"></ul>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/web/studio.js?v=keep-optional" defer></script>
+  </body>
+</html>
