@@ -66,3 +66,12 @@ def test_apply_sample_board_maps_lanes_and_skips() -> None:
     assert project.skipped == []
     assert data["pending_approval"] is True
     assert data["budget"]["over_budget"] is True
+
+
+def test_swap_spec_rejects_bathroom_mat_for_living_rug() -> None:
+    store.apply_sample_board("swap-rug-1")
+    try:
+        store.swap_spec("swap-rug-1", "RUG-8X10-RST", "RUG-BATH-TER")
+        raise AssertionError("expected bathroom mat rejection")
+    except ValueError as exc:
+        assert "living" in str(exc)

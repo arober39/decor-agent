@@ -201,6 +201,35 @@ def drop_spec(context_key: str, sku: str) -> DesignProject:
     return get_or_create(context_key)
 
 
+def swap_spec(context_key: str, sku: str, to_sku: str) -> DesignProject:
+    current = get_product(sku)
+    incoming = get_product(to_sku)
+    if current is None or incoming is None:
+        raise ValueError("Unknown sku")
+    room = _room_type(context_key)
+    if incoming.category != current.category:
+        raise ValueError("Swap has to stay in the same category")
+    if room and room not in incoming.room_types:
+        raise ValueError(f"{incoming.name} is not a {room} piece")
+    project = get_or_create(context_key)
+    existing = next((row for row in project.spec_list if row.sku == sku), None)
+    lane = existing.lane if existing else "close"
+    remove_spec(context_key, sku)
+    add_spec(
+        context_key,
+        to_sku,
+        _room_name(context_key),
+        lane=lane,
+        why=f"Cheaper catalog SKU than {current.name}",
+    )
+    request_approval(
+        context_key,
+        "spec",
+        f"Swapped {current.name} for {incoming.name} ({incoming.sku}).",
+    )
+    return get_or_create(context_key)
+
+
 def remove_spec(context_key: str, sku: str) -> DesignProject:
     project = get_or_create(context_key)
     project.spec_list = [item for item in project.spec_list if item.sku != sku]
