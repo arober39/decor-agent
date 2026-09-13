@@ -28,11 +28,6 @@ class Brief(BaseModel):
     style_preferences: str = ""
 
 
-class SkippedPin(BaseModel):
-    label: str
-    why: str = ""
-
-
 class SpecItem(BaseModel):
     sku: str
     name: str
@@ -42,6 +37,11 @@ class SpecItem(BaseModel):
     room: str
     status: SpecStatus = "draft"
     lane: SpecLane = "must"
+    why: str = ""
+
+
+class SkippedPin(BaseModel):
+    label: str
     why: str = ""
 
 
@@ -100,22 +100,52 @@ class DesignProject(BaseModel):
             self.status = "intake"
 
     def as_public_dict(self) -> dict:
+        from app.board import pin_image_url
+        from app.catalog import catalog_image_url, cheaper_in_room, get_product
+
+        room_type = "living"
+        if len(self.rooms) == 1:
+            room_type = next(iter(self.rooms.values())).room_type
+        specs = []
+        for item in self.spec_list:
+            row = item.model_dump()
+            row["image_url"] = catalog_image_url(item.sku)
+            product = get_product(item.sku)
+            row["color"] = product.color if product else ""
+            row["cheaper"] = [
+                {
+                    "sku": option.sku,
+                    "name": option.name,
+                    "price_cents": option.price_cents,
+                    "color": option.color,
+                }
+                for option in cheaper_in_room(item.sku, room_type)[:2]
+            ]
+            specs.append(row)
+        over_cents = 0
+        if self.over_budget and self.budget_total_cents is not None:
+            over_cents = self.planned_cents - self.budget_total_cents
         return {
             "context_key": self.context_key,
             "status": self.status,
             "brief": self.brief.model_dump(),
             "rooms": {key: room.model_dump() for key, room in self.rooms.items()},
-            "spec_list": [item.model_dump() for item in self.spec_list],
+            "spec_list": specs,
             "skipped": [item.model_dump() for item in self.skipped],
             "board_pins": list(self.board_pins),
+            "board": [
+                {"label": label, "image_url": pin_image_url(label)}
+                for label in self.board_pins
+            ],
             "rejected": list(self.rejected),
             "budget": {
                 "total_cents": self.budget_total_cents,
                 "committed_cents": self.committed_cents,
                 "draft_cents": self.draft_cents,
-                "remaining_cents": self.remaining_cents,
                 "planned_cents": self.planned_cents,
+                "remaining_cents": self.remaining_cents,
                 "over_budget": self.over_budget,
+                "over_cents": over_cents,
             },
             "pending_approval": self.pending_approval,
             "pending_approval_kind": self.pending_approval_kind,
