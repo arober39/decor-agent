@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 
 from app.catalog import get_product
-from app.events import SPEC_SAVED, track
+from app.events import SPEC_APPROVED, SPEC_SAVED, track
 from app.project import ApprovalKind, DesignProject, Room, SpecItem, SpecLane
 
 
@@ -157,6 +157,12 @@ def approve(context_key: str, kind: ApprovalKind | None = None) -> DesignProject
         for item in project.spec_list:
             if item.status == "draft":
                 item.status = "committed"
+                track(
+                    SPEC_APPROVED,
+                    context_key,
+                    {"sku": item.sku, "lane": item.lane, "room": item.room},
+                    1,
+                )
     project.approvals[resolved] = True
     project.pending_approval = False
     project.pending_approval_kind = None
