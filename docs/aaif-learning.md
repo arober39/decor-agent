@@ -201,3 +201,15 @@ Catalog-only is the default job. The user should not have to say "use SKUs only.
 ## Slice: catalog search folds hyphens
 
 A brief like "12x14 living room midcentury $2000" used to miss `ART-SOFA-721` because the row says `mid-century` and `12x14` is not a product field. Search now folds hyphens (`midcentury` = `mid-century`) and drops dimensions and stopwords. Still no invented rows. Empty result means empty inventory.
+
+## Slice: board → shopping list on the same job
+
+The product is a spec you can Approve, not a chat that invents IKEA.
+
+**Harden the job.** Text brief still goes catalog → `project://` → panel → Approve. `apply_board` is a fourth MCP tool. Skip is not a spend line.
+
+**Board intake.** A curated living-room board maps to must / close / skip against the 20 SKUs. No vision API. Mohair and drapes skip because they are not in inventory. The four catalog hits are Sven, jute 8x10, Seno, Arca. Planned spend is $2,376 on a $2,000 cap — the panel says so.
+
+**LaunchDarkly the agent way.** `decor-board-intake` is a product boolean (on offline). `spec_saved` / `spec_approved` fire from the store. AI Config still picks the model. It still does not write the job.
+
+**Experiment later.** KPI is approved spec lines, not tokens. Until something can deploy this repo, experiment at 10% 50/50 and ramp by hand. See [`docs/experiment-loop.md`](experiment-loop.md).
