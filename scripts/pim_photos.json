@@ -1,0 +1,83 @@
+{
+  "ART-SOFA-721": {"copy": "web/images/ART-SOFA-721.jpg"},
+  "ART-SOFA-84V": {"unsplash": "photo-1555041469-a586c61ea9bc"},
+  "IKE-SOFA-KL1": {"unsplash": "photo-1484101403633-562f891dc89a"},
+  "WSM-SOFA-AND": {"unsplash": "photo-1493663284031-b7e3aefcae8e"},
+  "IKE-SOFA-KLP": {"unsplash": "photo-1540574163026-643ea20ade25"},
+
+  "ART-CHAIR-LEO": {"unsplash": "photo-1586023492125-27b2c045efd7"},
+  "ART-CHAIR-MOH": {"copy": "web/images/pin-mohair-chair.jpg"},
+  "IKE-CHAIR-POA": {"unsplash": "photo-1506439773649-6e0eb8cfb237"},
+  "WSM-CHAIR-SLP": {"unsplash": "photo-1592078615290-033ee584e267"},
+  "IKE-CHAIR-ING": {"unsplash": "photo-1567538096630-e0c55bd6374c"},
+  "ART-CHAIR-DIN": {"unsplash": "photo-1519947486511-46149fa0a254"},
+  "IKE-CHAIR-MRK": {"unsplash": "photo-1580480055273-228ff5388ef8"},
+  "ART-CHAIR-OFF": {"unsplash": "photo-1493809842364-78817add7ffb"},
+
+  "ART-COF-48R": {"copy": "web/images/ART-COF-48R.jpg"},
+  "ART-COF-MRB": {"copy": "web/images/pin-marble-table.jpg"},
+  "IKE-COF-LIS": {"unsplash": "photo-1533090161767-e6ffed986c88"},
+  "ART-SIDE-OAK": {"unsplash": "photo-1532372320572-cda25653a26d"},
+  "WSM-DIN-OAK": {"unsplash": "photo-1600210492486-724fe5c67fb0"},
+  "IKE-DIN-JOK": {"unsplash": "photo-1414235077428-338989a2e8c0"},
+  "ART-DIN-WAL": {"unsplash": "photo-1615066390971-03e4e1c36ddf"},
+  "IKE-NIGHT-HEM": {"unsplash": "photo-1540932239986-30128078f3c5"},
+  "ART-NIGHT-WAL": {"unsplash": "photo-1505691938895-1758d7feb511"},
+
+  "RUG-8X10-JUT": {"copy": "web/images/RUG-8X10-JUT.jpg"},
+  "RUG-8X10-IVO": {"unsplash": "photo-1449247709967-d4461a6a6103"},
+  "RUG-8X10-RST": {"copy": "web/images/pin-rust-rug.jpg"},
+  "RUG-5X7-JUT": {"unsplash": "photo-1600210491892-03d54c0aaf87"},
+  "RUG-5X8-WOL": {"unsplash": "photo-1578662996442-48f60103fc96"},
+  "RUG-BATH-TER": {"unsplash": "photo-1600566753190-17f0baa2a6c3"},
+  "IKE-RUG-TOF": {"unsplash": "photo-1584622650111-993a426fbf0a"},
+  "RUG-KITCH-RUN": {"unsplash": "photo-1556912172-45b7abe8b7e1"},
+
+  "ART-LAMP-ARC": {"copy": "web/images/ART-LAMP-ARC.jpg"},
+  "ART-LAMP-CER": {"copy": "web/images/pin-ceramic-lamp.jpg"},
+  "IKE-LAMP-HEK": {"unsplash": "photo-1507473885765-e6ed057f782c"},
+  "IKE-LAMP-BAR": {"unsplash": "photo-1513506003901-1e6a229e2d15"},
+  "IKE-LAMP-TER": {"unsplash": "photo-1494438639946-1ebd1d20bf85"},
+  "WSM-LAMP-DIN": {"unsplash": "photo-1513694203232-719a280e022f"},
+  "IKE-LAMP-HKT": {"unsplash": "photo-1519710164239-da123dc03ef4"},
+  "IKE-LAMP-NYM": {"unsplash": "photo-1565814329452-e1efa11c5b89"},
+  "WSM-SCONCE-BR": {"unsplash": "photo-1618220048045-10a6dbdf83e0"},
+
+  "IKE-BED-MAL": {"unsplash": "photo-1505693416388-ac5ce068fe85"},
+  "ART-BED-CEN": {"unsplash": "photo-1616594039964-ae9021a400a0"},
+  "WSM-BED-LIN": {"unsplash": "photo-1631049307264-da0ec9d70304"},
+
+  "IKE-DESK-BEK": {"unsplash": "photo-1593062096033-9a26b09da705"},
+  "ART-DESK-ODN": {"unsplash": "photo-1524758631624-e2822e304c36"},
+  "IKE-DESK-MIC": {"unsplash": "photo-1518455027359-f3f8164ba6bd"},
+
+  "IKE-VAN-GOD": {"unsplash": "photo-1552321554-5fefe8c9ef14"},
+  "ART-VAN-OAK": {"unsplash": "photo-1620626011761-996317b8d101"},
+  "ART-STOR-CRD": {"unsplash": "photo-1556228453-efd6c1ff04f6"},
+  "IKE-KITCH-EN": {"unsplash": "photo-1556912173-46c336c7fd55"},
+  "IKE-SHELF-KAL": {"unsplash": "photo-1556228720-195a672e8a03"},
+  "IKE-SHELF-BIL": {"unsplash": "photo-1507842217343-583bb7270b66"},
+  "ART-SHELF-WAL": {"unsplash": "photo-1545167622-3a6ac756afa4"},
+  "IKE-DRESS-HEM": {"unsplash": "photo-1595428774223-ef52624120d2"},
+  "ART-DRESS-WAL": {"unsplash": "photo-1556228578-8c89e6adf883"},
+  "IKE-STOR-GOD": {"unsplash": "photo-1556909114-f6e7ad7d3136"},
+
+  "WSM-MIRR-RND": {"unsplash": "photo-1618220179428-22790b461013"},
+  "IKE-MIRR-LIN": {"unsplash": "photo-1618221195710-dd6b41faaea6"},
+
+  "WSM-DRAPE-LN": {"copy": "web/images/pin-linen-drapery.jpg"},
+  "WSM-DRAPE-BK": {"unsplash": "photo-1560185127-6ed189bf02f4"},
+  "IKE-DRAPE-SAN": {"unsplash": "photo-1615873968403-89e068629265"},
+
+  "IKE-STOOL-FRK": {"unsplash": "photo-1416879595882-3373a0480b5b"},
+  "WSM-STOOL-OAK": {"unsplash": "photo-1503602642458-232111445657"},
+
+  "WSM-HW-BRS": {"unsplash": "photo-1556911220-bff31c812dba"},
+  "WSM-HW-BLK": {"unsplash": "photo-1560448204-e02f11c3d0e2"},
+  "IKE-HW-BAG": {"unsplash": "photo-1560448075-bb485b067938"},
+
+  "BM-PAINT-WD": {"unsplash": "photo-1615529182904-14819c35db37"},
+  "BM-PAINT-SW": {"unsplash": "photo-1598300042247-d088f8ab3a91"},
+  "BM-PAINT-RP": {"unsplash": "photo-1615874694520-474822394e73"},
+  "BM-PAINT-HN": {"unsplash": "photo-1560185007-cde436f6a4d0"}
+}
