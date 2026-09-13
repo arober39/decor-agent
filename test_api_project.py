@@ -20,6 +20,7 @@ def test_studio_and_catalog_routes() -> None:
     assert b"starter brief" in studio.content
     assert b"sample board" in studio.content
     assert b"start-guide" in studio.content
+    assert b"list-locked" in studio.content
     assert catalog.status_code == 200
     products = catalog.json()["products"]
     assert len(products) == 4

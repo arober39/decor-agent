@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;1,400&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/web/site.css?v=board-stay" />
+    <link rel="stylesheet" href="/web/site.css?v=list-locked" />
   </head>
   <body class="studio-page">
     <header class="nav">
@@ -143,6 +143,7 @@
         <h2>Shopping list</h2>
         <p id="project-brief" class="muted">No brief yet. Use a starter chip or tell me the room.</p>
         <p id="list-note" class="list-note hidden"></p>
+        <p id="list-locked" class="list-locked hidden" role="status">Locked for this room. This is the spec.</p>
         <div id="list-actions" class="job-actions hidden">
           <button class="btn btn-dark" type="button" data-job="approve">Approve list</button>
           <button class="btn btn-ghost" type="button" data-job="change">Request changes</button>
@@ -163,6 +164,6 @@
       </section>
     </div>
 
-    <script src="/web/studio.js?v=keep-optional" defer></script>
+    <script src="/web/studio.js?v=list-locked" defer></script>
   </body>
 </html>

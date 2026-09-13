@@ -699,6 +699,29 @@ input {
   line-height: 1.4;
 }
 
+.list-locked {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--chrome);
+  color: var(--white);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.list-panel.is-locked > h2::after {
+  content: "Locked";
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--must-bg);
+  color: var(--must);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
 .spec-row {
   display: flex;
   gap: 12px;

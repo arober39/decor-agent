@@ -288,6 +288,12 @@ function renderProject(project) {
   const started = specs.length > 0 || boardWasMapped();
   setHidden("start-guide", started);
 
+  const roomName = rooms[0]?.name || "this room";
+  const lockEl = document.getElementById("list-locked");
+  lockEl.textContent = `Locked for the ${roomName}. This is the spec.`;
+  setHidden("list-locked", !locked);
+  document.querySelector(".list-panel")?.classList.toggle("is-locked", locked);
+
   const showApprove = !locked && (hasDraftSpec(project) || Boolean(project.pending_approval));
   setHidden("approval-actions", !showApprove);
   setHidden("list-actions", !showApprove);
