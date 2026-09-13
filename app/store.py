@@ -191,6 +191,16 @@ def _room_name(context_key: str) -> str:
     return "living room"
 
 
+def drop_spec(context_key: str, sku: str) -> DesignProject:
+    project = get_or_create(context_key)
+    item = next((row for row in project.spec_list if row.sku == sku), None)
+    if item is None:
+        raise ValueError(f"No spec line for {sku}")
+    remove_spec(context_key, sku)
+    request_approval(context_key, "spec", f"Removed {item.name} ({item.sku}).")
+    return get_or_create(context_key)
+
+
 def remove_spec(context_key: str, sku: str) -> DesignProject:
     project = get_or_create(context_key)
     project.spec_list = [item for item in project.spec_list if item.sku != sku]
