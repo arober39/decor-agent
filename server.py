@@ -142,6 +142,12 @@ async def studio() -> FileResponse:
     return FileResponse(WEB_DIR / "studio.html")
 
 
+@app.get("/api/catalog")
+async def catalog(limit: int = 8) -> dict:
+    rows = [product.as_dict() for product in PRODUCTS[: max(1, min(limit, 96))]]
+    return {"products": rows}
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> JSONResponse:
     message_id = str(uuid.uuid4())
