@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 
 from app.catalog import get_product
+from app.events import SPEC_SAVED, track
 from app.project import ApprovalKind, DesignProject, Room, SpecItem, SpecLane
 
 
@@ -124,6 +125,12 @@ def add_spec(
             return project
     project.spec_list.append(item)
     project.refresh_status()
+    track(
+        SPEC_SAVED,
+        context_key,
+        {"sku": item.sku, "lane": lane, "room": target},
+        1,
+    )
     return project
 
 
