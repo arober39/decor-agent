@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 
 from app.catalog import get_product
-from app.project import ApprovalKind, DesignProject, Room, SpecItem
+from app.project import ApprovalKind, DesignProject, Room, SpecItem, SpecLane
 
 
 _lock = threading.Lock()
@@ -84,7 +84,15 @@ def set_budget(context_key: str, budget_dollars: float) -> DesignProject:
     return project
 
 
-def add_spec(context_key: str, sku: str, room_name: str) -> DesignProject:
+def add_spec(
+    context_key: str,
+    sku: str,
+    room_name: str,
+    lane: SpecLane = "must",
+    why: str = "",
+) -> DesignProject:
+    if lane == "skip":
+        raise ValueError("skip lines are not spec items")
     product = get_product(sku)
     if product is None:
         raise ValueError(f"Unknown sku {sku}")
@@ -103,11 +111,15 @@ def add_spec(context_key: str, sku: str, room_name: str) -> DesignProject:
         price_cents=product.price_cents,
         room=target,
         status="draft",
+        lane=lane,
+        why=why,
     )
     for existing in project.spec_list:
         if existing.sku == item.sku and existing.room.lower() == item.room.lower():
             existing.status = "draft"
             existing.price_cents = item.price_cents
+            existing.lane = lane
+            existing.why = why or existing.why
             project.refresh_status()
             return project
     project.spec_list.append(item)

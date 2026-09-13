@@ -38,3 +38,20 @@ if __name__ == "__main__":
             setup_function()
             fn()
             print(f"PASS {name}")
+
+
+def test_add_spec_keeps_lane() -> None:
+    store.upsert_room("p1", name="living room", room_type="living")
+    store.add_spec("p1", "RUG-8X10-JUT", "living room", lane="close", why="jute, not rust")
+    item = store.get_or_create("p1").spec_list[0]
+    assert item.lane == "close"
+    assert item.why == "jute, not rust"
+
+
+def test_add_spec_rejects_skip_lane() -> None:
+    store.upsert_room("p1", name="living room", room_type="living")
+    try:
+        store.add_spec("p1", "ART-SOFA-721", "living room", lane="skip")
+        raise AssertionError("expected skip rejection")
+    except ValueError as exc:
+        assert "skip" in str(exc)
