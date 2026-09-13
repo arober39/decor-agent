@@ -282,6 +282,13 @@ async def swap_spec(req: ProjectRequest) -> JSONResponse:
     return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
 
 
+@app.post("/api/project/fit-budget")
+async def fit_budget(req: ProjectRequest) -> JSONResponse:
+    store.fit_budget(req.context_key)
+    log.info("project.fit_budget", context_key=req.context_key)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
 if __name__ == "__main__":
     import uvicorn
 
