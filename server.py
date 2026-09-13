@@ -17,7 +17,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.flags import build_context, get_flag, set_current_user_tier
+from app.flags import BOARD_INTAKE_FLAG, build_context, get_flag, set_current_user_tier
+from app.catalog import PRODUCTS
 from app.harness import run_agent_async
 from app.logging import configure_logging, get_logger
 from app.project import ApprovalKind
@@ -134,6 +135,11 @@ async def health() -> HealthResponse:
 @app.get("/")
 async def frontend() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/studio")
+async def studio() -> FileResponse:
+    return FileResponse(WEB_DIR / "studio.html")
 
 
 @app.post("/api/chat", response_model=ChatResponse)
