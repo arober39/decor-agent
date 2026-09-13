@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 ApprovalKind = Literal["concept", "budget", "spec"]
 SpecStatus = Literal["draft", "committed"]
+SpecLane = Literal["must", "close", "skip"]
 ProjectStatus = Literal["intake", "planning", "awaiting_approval", "complete"]
 
 
@@ -27,6 +28,11 @@ class Brief(BaseModel):
     style_preferences: str = ""
 
 
+class SkippedPin(BaseModel):
+    label: str
+    why: str = ""
+
+
 class SpecItem(BaseModel):
     sku: str
     name: str
@@ -35,6 +41,8 @@ class SpecItem(BaseModel):
     price_cents: int
     room: str
     status: SpecStatus = "draft"
+    lane: SpecLane = "must"
+    why: str = ""
 
 
 class DesignProject(BaseModel):
@@ -42,6 +50,8 @@ class DesignProject(BaseModel):
     brief: Brief = Field(default_factory=Brief)
     rooms: dict[str, Room] = Field(default_factory=dict)
     spec_list: list[SpecItem] = Field(default_factory=list)
+    skipped: list[SkippedPin] = Field(default_factory=list)
+    board_pins: list[str] = Field(default_factory=list)
     rejected: list[str] = Field(default_factory=list)
     budget_total_cents: int | None = None
     pending_approval: bool = False
@@ -86,6 +96,8 @@ class DesignProject(BaseModel):
             "brief": self.brief.model_dump(),
             "rooms": {key: room.model_dump() for key, room in self.rooms.items()},
             "spec_list": [item.model_dump() for item in self.spec_list],
+            "skipped": [item.model_dump() for item in self.skipped],
+            "board_pins": list(self.board_pins),
             "rejected": list(self.rejected),
             "budget": {
                 "total_cents": self.budget_total_cents,
