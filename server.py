@@ -273,6 +273,15 @@ async def drop_spec(req: ProjectRequest) -> JSONResponse:
     return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
 
 
+@app.post("/api/project/swap-spec")
+async def swap_spec(req: ProjectRequest) -> JSONResponse:
+    err = _spec_change(lambda: store.swap_spec(req.context_key, req.sku, req.to_sku))
+    if err:
+        return err
+    log.info("project.swapped", context_key=req.context_key, sku=req.sku, to_sku=req.to_sku)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
 if __name__ == "__main__":
     import uvicorn
 
