@@ -289,6 +289,15 @@ async def fit_budget(req: ProjectRequest) -> JSONResponse:
     return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
 
 
+@app.post("/api/project/raise-budget")
+async def raise_budget(req: ProjectRequest) -> JSONResponse:
+    err = _spec_change(lambda: store.raise_budget_to_planned(req.context_key))
+    if err:
+        return err
+    log.info("project.raise_budget", context_key=req.context_key)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
 if __name__ == "__main__":
     import uvicorn
 
