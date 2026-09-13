@@ -22,7 +22,9 @@ __pycache__/
 .claude/settings.local.json
 .claude/skills/
 .agents/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .qodo/
 
 # Logs / local artifacts
