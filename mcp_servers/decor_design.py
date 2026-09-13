@@ -93,12 +93,15 @@ def update_project(
     existing_pieces: str = "",
     style_notes: str = "",
     sku: str = "",
+    lane: str = "must",
+    why: str = "",
 ) -> dict:
     """Create or update the durable design project for this client.
 
     action: set_brief | set_budget | upsert_room | add_spec | remove_spec
     keep, avoid, existing_pieces: comma-separated lists
     add_spec requires a sku returned by search_catalog
+    lane: must | close. Skip is not a spec line — use apply_board or leave it off the list.
     """
     def _parts(value: str) -> list[str]:
         return [part.strip() for part in value.split(",") if part.strip()]
@@ -128,8 +131,10 @@ def update_project(
             style_notes=style_notes or None,
         )
     elif action == "add_spec":
+        if lane not in {"must", "close"}:
+            return {"error": "lane must be must or close"}
         try:
-            store.add_spec(context_key, sku, room_name)
+            store.add_spec(context_key, sku, room_name, lane=lane, why=why)
         except ValueError as exc:
             return {"error": str(exc)}
     elif action == "remove_spec":
@@ -138,6 +143,28 @@ def update_project(
         store.remove_spec(context_key, sku)
     else:
         return {"error": f"unsupported action: {action}"}
+    return store.snapshot(context_key)
+
+
+@server.tool()
+def apply_board(
+    context_key: str,
+    room_name: str = "living room",
+    budget_dollars: float = 2000,
+) -> dict:
+    """Map the sample living-room mood board onto catalog SKUs.
+
+    Only when the user explicitly asks to map the sample board. A room,
+    budget, style, or starter brief is not that — search and add_spec.
+
+    Must and close pins become draft spec items with real SKUs. Skip pins
+    are recorded but are not spend lines. Then pause for host approval.
+    """
+    store.apply_sample_board(
+        context_key,
+        room_name=room_name or "living room",
+        budget_dollars=budget_dollars,
+    )
     return store.snapshot(context_key)
 
 

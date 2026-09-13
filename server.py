@@ -17,7 +17,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.flags import build_context, get_flag, set_current_user_tier
+from app.flags import BOARD_INTAKE_FLAG, build_context, get_flag, set_current_user_tier
+from app.catalog import PRODUCTS
 from app.harness import run_agent_async
 from app.logging import configure_logging, get_logger
 from app.project import ApprovalKind
@@ -52,6 +53,8 @@ class ProjectRequest(BaseModel):
     user_tier: Literal["free", "premium"] | None = None
     kind: ApprovalKind | None = None
     reason: str = ""
+    sku: str = ""
+    to_sku: str = ""
 
 
 @asynccontextmanager
@@ -136,6 +139,17 @@ async def frontend() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
 
 
+@app.get("/studio")
+async def studio() -> FileResponse:
+    return FileResponse(WEB_DIR / "studio.html")
+
+
+@app.get("/api/catalog")
+async def catalog(limit: int = 8) -> dict:
+    rows = [product.as_dict() for product in PRODUCTS[: max(1, min(limit, 96))]]
+    return {"products": rows}
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> JSONResponse:
     message_id = str(uuid.uuid4())
@@ -204,9 +218,28 @@ async def chat(req: ChatRequest) -> JSONResponse:
     return JSONResponse(status_code=200, content=body.model_dump())
 
 
+@app.get("/api/capabilities")
+async def capabilities(context_key: str = "anonymous") -> dict:
+    context = build_context(context_key)
+    return {
+        "board_intake": get_flag(BOARD_INTAKE_FLAG, context, default=True),
+        "sample_board": "living-linen",
+    }
+
+
 @app.get("/api/project")
 async def get_project(context_key: str) -> dict:
     return store.snapshot(context_key)
+
+
+@app.post("/api/project/from-board")
+async def project_from_board(req: ProjectRequest) -> JSONResponse:
+    context = build_context(req.context_key)
+    if not get_flag(BOARD_INTAKE_FLAG, context, default=True):
+        return JSONResponse(status_code=403, content={"detail": "Board intake is off."})
+    store.apply_sample_board(req.context_key)
+    log.info("project.from_board", context_key=req.context_key)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
 
 
 @app.post("/api/project/approve")
@@ -221,6 +254,48 @@ async def reject_project(req: ProjectRequest) -> dict:
     store.reject(req.context_key, reason=req.reason)
     log.info("project.rejected", context_key=req.context_key, reason=req.reason)
     return store.snapshot(req.context_key)
+
+
+def _spec_change(work):
+    try:
+        work()
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+    return None
+
+
+@app.post("/api/project/drop-spec")
+async def drop_spec(req: ProjectRequest) -> JSONResponse:
+    err = _spec_change(lambda: store.drop_spec(req.context_key, req.sku))
+    if err:
+        return err
+    log.info("project.dropped", context_key=req.context_key, sku=req.sku)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
+@app.post("/api/project/swap-spec")
+async def swap_spec(req: ProjectRequest) -> JSONResponse:
+    err = _spec_change(lambda: store.swap_spec(req.context_key, req.sku, req.to_sku))
+    if err:
+        return err
+    log.info("project.swapped", context_key=req.context_key, sku=req.sku, to_sku=req.to_sku)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
+@app.post("/api/project/fit-budget")
+async def fit_budget(req: ProjectRequest) -> JSONResponse:
+    store.fit_budget(req.context_key)
+    log.info("project.fit_budget", context_key=req.context_key)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
+@app.post("/api/project/raise-budget")
+async def raise_budget(req: ProjectRequest) -> JSONResponse:
+    err = _spec_change(lambda: store.raise_budget_to_planned(req.context_key))
+    if err:
+        return err
+    log.info("project.raise_budget", context_key=req.context_key)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
 
 
 if __name__ == "__main__":

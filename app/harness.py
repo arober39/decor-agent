@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from app.catalog import PRODUCTS, get_product
+from app.catalog import PRODUCTS, get_product, room_key, search_products
 
 import anyio
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -31,7 +31,8 @@ log = get_logger(__name__)
 
 # search_catalog is read-only. The other two change the project; we still
 # execute them, then stop after request_approval so a human can commit.
-MUTATING_TOOLS = frozenset({"update_project", "request_approval"})
+MUTATING_TOOLS = frozenset({"update_project", "request_approval", "apply_board"})
+CONTEXT_TOOLS = frozenset({"update_project", "request_approval", "apply_board"})
 
 # LaunchDarkly still ships the old specialist-router prompt. That prompt
 # tells the model to invent IKEA prices. The job lives here until those
@@ -40,6 +41,26 @@ TIER_NOTES = {
     "free": "Prefer lower-priced catalog rows that still fit the brief.",
     "premium": "Prefer higher-end catalog rows when the budget holds.",
 }
+
+APPLY_BOARD_PHRASES = (
+    "sample board",
+    "map the board",
+    "map sample",
+    "map the sample",
+)
+
+APPLY_BOARD_REFUSAL = {
+    "error": (
+        "apply_board is only for an explicit sample-board ask. "
+        "Search the catalog and update_project add_spec instead."
+    )
+}
+
+
+def asked_for_sample_board(message: str) -> bool:
+    """True only when the user asked to map the sample board, not a room brief."""
+    lower = (message or "").lower()
+    return any(phrase in lower for phrase in APPLY_BOARD_PHRASES)
 
 
 def _schema_dict(schema: Any) -> dict:
@@ -81,9 +102,71 @@ def parse_mcp_payload(result: Any) -> Any:
 
 def inject_context_key(name: str, args: dict, context_key: str) -> dict:
     filled = dict(args)
-    if name in {"update_project", "request_approval"} and "context_key" not in filled:
+    if name in CONTEXT_TOOLS and "context_key" not in filled:
         filled["context_key"] = context_key
     return filled
+
+
+_REVISION_VERBS = ("swap", "replace", "switch", "instead")
+_DROP_VERBS = ("drop ", "remove ", "take off")
+_WANT_WORDS = (
+    "white",
+    "brass",
+    "black",
+    "gray",
+    "grey",
+    "oak",
+    "walnut",
+    "jute",
+    "rust",
+    "linen",
+    "velvet",
+    "charcoal",
+    "olive",
+    "speckled",
+    "ivory",
+    "ceramic",
+    "marble",
+    "mohair",
+    "cheaper",
+)
+_CATEGORY_HINTS = (
+    ("coffee table", "table"),
+    ("floor lamp", "lighting"),
+    ("table lamp", "lighting"),
+    ("lighting", "lighting"),
+    ("lamp", "lighting"),
+    ("sofa", "sofa"),
+    ("couch", "sofa"),
+    ("rug", "rug"),
+    ("chair", "chair"),
+    ("table", "table"),
+    ("desk", "desk"),
+    ("bed", "bed"),
+    ("paint", "paint"),
+    ("mirror", "decor"),
+    ("drape", "drapery"),
+    ("curtain", "drapery"),
+    ("drapery", "drapery"),
+)
+
+
+def parse_revision_intent(message: str) -> dict | None:
+    """Swap/drop language the host can honor without waiting on the model."""
+    lower = f" {message.lower()} "
+    kind = ""
+    if any(verb in lower for verb in _REVISION_VERBS):
+        kind = "swap"
+    elif any(verb in lower for verb in _DROP_VERBS):
+        kind = "drop"
+    if not kind:
+        return None
+    category = ""
+    for hint, mapped in _CATEGORY_HINTS:
+        if hint in lower:
+            category = mapped
+            break
+    return {"kind": kind, "category": category}
 
 
 def parse_job_facts(message: str) -> dict:
@@ -162,13 +245,180 @@ def skus_named_in_text(text: str, skus: list[str]) -> list[str]:
     return named
 
 
+def _project_room_name(project: dict, fallback: str = "living room") -> str:
+    rooms = project.get("rooms") or {}
+    if len(rooms) == 1:
+        room = next(iter(rooms.values()))
+        if isinstance(room, dict) and room.get("name"):
+            return room["name"]
+    return fallback
+
+
+def _project_room_type(project: dict) -> str:
+    rooms = project.get("rooms") or {}
+    if len(rooms) == 1:
+        room = next(iter(rooms.values()))
+        if isinstance(room, dict) and room.get("room_type"):
+            return room_key(room["room_type"])
+    return room_key(_project_room_name(project))
+
+
+def _wanted_looks(message: str) -> list[str]:
+    lower = f" {message.lower()} "
+    return [word for word in _WANT_WORDS if f" {word} " in lower]
+
+
+def _matches_look(product, wants: list[str]) -> bool:
+    if not wants or wants == ["cheaper"]:
+        return True
+    blob = " ".join((product.color, product.name, *product.tags)).lower()
+    looks = [word for word in wants if word != "cheaper"]
+    return all(word in blob for word in looks)
+
+
+def _revision_hits(user_message: str, category: str, messages: list, room_type: str) -> list:
+    found = search_skus_from_messages(messages)
+    products = [get_product(sku) for sku in found]
+    products = [item for item in products if item is not None]
+    if not products:
+        products = search_products(query=user_message, category=category, limit=8)
+    if category:
+        products = [item for item in products if item.category == category]
+    if room_type:
+        products = [item for item in products if room_type in item.room_types]
+    wants = _wanted_looks(user_message)
+    filtered = [item for item in products if _matches_look(item, wants)]
+    return filtered
+
+
+async def _request_spec_approval(client: Client, context_key: str, summary: str) -> dict:
+    await client.call_tool(
+        "request_approval",
+        {"context_key": context_key, "kind": "spec", "summary": summary},
+    )
+    return await _read_project(client, context_key)
+
+
+async def persist_revision(
+    client: Client,
+    context_key: str,
+    user_message: str,
+    messages: list,
+    project: dict,
+) -> tuple[dict, str | None]:
+    """Honor swap/drop from inventory even when the model skips tools."""
+    intent = parse_revision_intent(user_message)
+    if not intent:
+        return project, None
+    category = intent["category"]
+    room_type = _project_room_type(project)
+    hits = _revision_hits(user_message, category, messages, room_type)
+    spec_items = project.get("spec_list") or []
+    spec_skus = {item.get("sku") for item in spec_items}
+    room = _project_room_name(project)
+    named = skus_named_in_text(user_message, [item.sku for item in hits])
+
+    if intent["kind"] == "drop":
+        if not category:
+            return project, None
+        removed = [item for item in spec_items if item.get("category") == category]
+        if not removed:
+            return project, f"Nothing in {category} is on the list to drop."
+        for item in removed:
+            await client.call_tool(
+                "update_project",
+                {
+                    "context_key": context_key,
+                    "action": "remove_spec",
+                    "sku": item["sku"],
+                },
+            )
+        names = ", ".join(f"{item.get('name')} ({item.get('sku')})" for item in removed)
+        project = await _request_spec_approval(
+            client, context_key, f"Removed {names}."
+        )
+        return project, f"Removed {names} from the draft spec."
+
+    if not category:
+        already = [item for item in hits if item.sku in spec_skus]
+        if already:
+            match = already[0]
+            project = await _request_spec_approval(
+                client,
+                context_key,
+                f"{match.name} ({match.sku}) is already on the list.",
+            )
+            return (
+                project,
+                f"{match.name} ({match.sku}) is already on the shopping list. "
+                f"Inventory color is {match.color}. There is no second {match.category} to swap in.",
+            )
+        return project, None
+
+    already = [item for item in hits if item.sku in spec_skus]
+    incoming = [item for item in hits if item.sku not in spec_skus]
+    if named:
+        incoming = [item for item in incoming if item.sku in named] or incoming
+    if not incoming and already:
+        match = already[0]
+        project = await _request_spec_approval(
+            client,
+            context_key,
+            f"{match.name} ({match.sku}) is already the {match.color} {match.category}.",
+        )
+        return (
+            project,
+            f"{match.name} ({match.sku}) is already on the shopping list. "
+            f"Inventory color is {match.color}. There is no second {match.category} to swap in.",
+        )
+
+    if not incoming:
+        wants = [word for word in _wanted_looks(user_message) if word != "cheaper"]
+        look = " ".join(wants) or "matching"
+        kind = category or "piece"
+        return (
+            project,
+            f"Inventory has no {look} {kind} for this {room_type} room. "
+            "I will not substitute a different room or invent a SKU.",
+        )
+
+    match = incoming[0]
+    for item in spec_items:
+        if item.get("category") == match.category and item.get("sku") != match.sku:
+            await client.call_tool(
+                "update_project",
+                {
+                    "context_key": context_key,
+                    "action": "remove_spec",
+                    "sku": item["sku"],
+                },
+            )
+    await client.call_tool(
+        "update_project",
+        {
+            "context_key": context_key,
+            "action": "add_spec",
+            "sku": match.sku,
+            "room_name": room,
+            "lane": "close",
+            "why": f"Client swap to {match.color} {match.category}",
+        },
+    )
+    project = await _request_spec_approval(
+        client,
+        context_key,
+        f"Swapped {match.category} to {match.name} ({match.sku}).",
+    )
+    return project, f"Swapped the {match.category} to {match.name} ({match.sku})."
+
+
 async def persist_talked_about_project(
     client: Client,
     context_key: str,
     user_message: str,
     messages: list,
     commentary: str,
-) -> dict:
+) -> tuple[dict, str | None]:
     """Write project:// from this turn when the model searched but forgot to persist."""
     facts = parse_job_facts(user_message)
     if facts.get("budget_dollars") is not None:
@@ -201,9 +451,14 @@ async def persist_talked_about_project(
                 "style_preferences": facts["style_preferences"],
             },
         )
+    project = await _read_project(client, context_key)
+    if parse_revision_intent(user_message):
+        return await persist_revision(
+            client, context_key, user_message, messages, project
+        )
     found = search_skus_from_messages(messages)
     to_add = skus_named_in_text(commentary, found) or found[:4]
-    room = facts.get("room_name") or "living room"
+    room = facts.get("room_name") or _project_room_name(project)
     for sku in to_add:
         await client.call_tool(
             "update_project",
@@ -216,7 +471,7 @@ async def persist_talked_about_project(
         )
     if to_add:
         log.info("harness.persisted_project", context_key=context_key, skus=to_add)
-    return await _read_project(client, context_key)
+    return await _read_project(client, context_key), None
 
 
 def _content_text(content: Any) -> str:
@@ -344,15 +599,22 @@ async def _run(message: str, context_key: str) -> dict:
                     )
                 break
 
+            executed_apply_board = False
             for call in calls:
                 name = call["name"]
                 args = inject_job_facts(
                     name, call.get("args") or {}, context_key, message
                 )
                 log.info("harness.tools_call", tool=name, iteration=iteration)
-                result = await client.call_tool(name, args)
+                if name == "apply_board" and not asked_for_sample_board(message):
+                    payload = APPLY_BOARD_REFUSAL
+                    log.info("harness.apply_board_refused", reason="not_sample_board_ask")
+                else:
+                    result = await client.call_tool(name, args)
+                    payload = parse_mcp_payload(result)
+                    if name == "apply_board":
+                        executed_apply_board = True
                 tool_calls_made.append(name)
-                payload = parse_mcp_payload(result)
                 messages.append(
                     ToolMessage(
                         content=json.dumps(payload) if not isinstance(payload, str) else payload,
@@ -360,16 +622,19 @@ async def _run(message: str, context_key: str) -> dict:
                         name=name,
                     )
                 )
-            if "request_approval" in [call["name"] for call in calls]:
+            called = [call["name"] for call in calls]
+            if "request_approval" in called or executed_apply_board:
                 stop_reason = "awaiting_approval"
                 break
         else:
             stop_reason = "max_iterations"
 
         commentary = _final_text(messages)
-        project = await persist_talked_about_project(
+        project, revision_reply = await persist_talked_about_project(
             client, context_key, message, messages, commentary
         )
+        if revision_reply:
+            commentary = revision_reply
 
     routed_to = tool_calls_made[0] if tool_calls_made else "direct"
     metadata = {

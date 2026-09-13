@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import threading
 
-from app.catalog import get_product
-from app.project import ApprovalKind, DesignProject, Room, SpecItem
+from app.board import resolve_sample_board
+from app.catalog import cheaper_in_room, get_product
+from app.events import SPEC_APPROVED, SPEC_SAVED, track
+from app.project import ApprovalKind, DesignProject, Room, SkippedPin, SpecItem, SpecLane
 
 
 _lock = threading.Lock()
@@ -84,7 +86,15 @@ def set_budget(context_key: str, budget_dollars: float) -> DesignProject:
     return project
 
 
-def add_spec(context_key: str, sku: str, room_name: str) -> DesignProject:
+def add_spec(
+    context_key: str,
+    sku: str,
+    room_name: str,
+    lane: SpecLane = "must",
+    why: str = "",
+) -> DesignProject:
+    if lane == "skip":
+        raise ValueError("skip lines are not spec items")
     product = get_product(sku)
     if product is None:
         raise ValueError(f"Unknown sku {sku}")
@@ -103,16 +113,179 @@ def add_spec(context_key: str, sku: str, room_name: str) -> DesignProject:
         price_cents=product.price_cents,
         room=target,
         status="draft",
+        lane=lane,
+        why=why,
     )
     for existing in project.spec_list:
         if existing.sku == item.sku and existing.room.lower() == item.room.lower():
             existing.status = "draft"
             existing.price_cents = item.price_cents
+            existing.lane = lane
+            existing.why = why or existing.why
             project.refresh_status()
             return project
     project.spec_list.append(item)
     project.refresh_status()
+    track(
+        SPEC_SAVED,
+        context_key,
+        {"sku": item.sku, "lane": lane, "room": target},
+        1,
+    )
     return project
+
+
+def apply_sample_board(
+    context_key: str,
+    room_name: str = "living room",
+    budget_dollars: float = 2000,
+) -> DesignProject:
+    """Host/MCP entry: curated pins → must/close spec lines + skip list."""
+    upsert_room(context_key, name=room_name, room_type="living")
+    set_budget(context_key, budget_dollars)
+    set_brief(
+        context_key,
+        lifestyle=f"{room_name} from a warm-linen board",
+        style_preferences="warm whites, oak, rust ground",
+    )
+    project = get_or_create(context_key)
+    decisions = resolve_sample_board()
+    project.board_pins = [row["label"] for row in decisions]
+    project.skipped = []
+    for row in decisions:
+        if row["lane"] == "skip" or not row["sku"]:
+            project.skipped.append(SkippedPin(label=row["label"], why=row["why"]))
+            continue
+        add_spec(
+            context_key,
+            row["sku"],
+            room_name,
+            lane=row["lane"],
+            why=row["why"],
+        )
+    project = get_or_create(context_key)
+    if project.over_budget and project.budget_total_cents is not None:
+        over = project.planned_cents - project.budget_total_cents
+        cap = project.budget_total_cents
+        summary = (
+            f"${over / 100:.0f} over the ${cap / 100:.0f} cap. "
+            "Drop an optional line or swap to a cheaper catalog SKU."
+        )
+    else:
+        summary = "Board mapped to catalog. Approve to commit keep and optional lines."
+    request_approval(context_key, "spec", summary)
+    return get_or_create(context_key)
+
+
+def _room_type(context_key: str) -> str:
+    project = get_or_create(context_key)
+    if len(project.rooms) == 1:
+        return next(iter(project.rooms.values())).room_type
+    return "living"
+
+
+def _room_name(context_key: str) -> str:
+    project = get_or_create(context_key)
+    if len(project.rooms) == 1:
+        return next(iter(project.rooms.values())).name
+    return "living room"
+
+
+def drop_spec(context_key: str, sku: str) -> DesignProject:
+    project = get_or_create(context_key)
+    item = next((row for row in project.spec_list if row.sku == sku), None)
+    if item is None:
+        raise ValueError(f"No spec line for {sku}")
+    remove_spec(context_key, sku)
+    request_approval(context_key, "spec", f"Removed {item.name} ({item.sku}).")
+    return get_or_create(context_key)
+
+
+def swap_spec(context_key: str, sku: str, to_sku: str) -> DesignProject:
+    current = get_product(sku)
+    incoming = get_product(to_sku)
+    if current is None or incoming is None:
+        raise ValueError("Unknown sku")
+    room = _room_type(context_key)
+    if incoming.category != current.category:
+        raise ValueError("Swap has to stay in the same category")
+    if room and room not in incoming.room_types:
+        raise ValueError(f"{incoming.name} is not a {room} piece")
+    project = get_or_create(context_key)
+    existing = next((row for row in project.spec_list if row.sku == sku), None)
+    lane = existing.lane if existing else "close"
+    remove_spec(context_key, sku)
+    add_spec(
+        context_key,
+        to_sku,
+        _room_name(context_key),
+        lane=lane,
+        why=f"Cheaper catalog SKU than {current.name}",
+    )
+    request_approval(
+        context_key,
+        "spec",
+        f"Swapped {current.name} for {incoming.name} ({incoming.sku}).",
+    )
+    return get_or_create(context_key)
+
+
+def fit_budget(context_key: str) -> DesignProject:
+    """Fit the cap from inventory: drop close lines, else a cheaper same-room SKU."""
+    dropped: list[str] = []
+    for _ in range(12):
+        project = get_or_create(context_key)
+        if not project.over_budget or project.budget_total_cents is None:
+            if dropped:
+                request_approval(
+                    context_key,
+                    "spec",
+                    "Dropped " + ", ".join(dropped) + " to fit the cap.",
+                )
+            else:
+                request_approval(context_key, "spec", "The list already fits the cap.")
+            return project
+        over = project.planned_cents - project.budget_total_cents
+        room = _room_type(context_key)
+        close = [item for item in project.spec_list if item.lane == "close"]
+        close.sort(key=lambda item: item.price_cents)
+        covering = [item for item in close if item.price_cents >= over]
+        if covering:
+            dropped.append(f"{covering[0].name} ({covering[0].sku})")
+            drop_spec(context_key, covering[0].sku)
+            continue
+        swapped = False
+        for item in list(get_or_create(context_key).spec_list):
+            if item.lane != "close":
+                continue
+            for option in cheaper_in_room(item.sku, room):
+                if item.price_cents - option.price_cents >= over:
+                    swap_spec(context_key, item.sku, option.sku)
+                    swapped = True
+                    break
+            if swapped:
+                break
+        if swapped:
+            return get_or_create(context_key)
+        if close:
+            dropped.append(f"{close[0].name} ({close[0].sku})")
+            drop_spec(context_key, close[0].sku)
+            continue
+        break
+    return get_or_create(context_key)
+
+
+def raise_budget_to_planned(context_key: str) -> DesignProject:
+    project = get_or_create(context_key)
+    if not project.planned_cents:
+        raise ValueError("Nothing planned to raise the cap to")
+    set_budget(context_key, project.planned_cents / 100)
+    request_approval(
+        context_key,
+        "budget",
+        f"Cap raised to ${project.planned_cents / 100:.0f} to match the list.",
+    )
+    return get_or_create(context_key)
 
 
 def remove_spec(context_key: str, sku: str) -> DesignProject:
@@ -138,6 +311,12 @@ def approve(context_key: str, kind: ApprovalKind | None = None) -> DesignProject
         for item in project.spec_list:
             if item.status == "draft":
                 item.status = "committed"
+                track(
+                    SPEC_APPROVED,
+                    context_key,
+                    {"sku": item.sku, "lane": item.lane, "room": item.room},
+                    1,
+                )
     project.approvals[resolved] = True
     project.pending_approval = False
     project.pending_approval_kind = None
