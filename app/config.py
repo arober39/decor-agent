@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     ld_project_name: str = Field(default="", validation_alias="LAUNCHDARKLY_PROJECT_NAME")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     environment: str = Field(default="development", validation_alias="ENVIRONMENT")
+    qdrant_environment: str = Field(
+        default="local-test",
+        validation_alias="QDRANT_ENVIRONMENT",
+    )
+    typesafe_api_key: str = Field(default="", validation_alias="TYPESAFE_API_KEY")
 
     default_model: str = "claude-sonnet-5"
     max_tokens: int = 1024
