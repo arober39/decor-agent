@@ -12,4 +12,9 @@ structlog
 requests
 launchdarkly-server-sdk
 launchdarkly-server-sdk-ai
+launchdarkly-observability
 mcp>=2.1.1
+qdrant-client
+sentence-transformers
+pyyaml
+typesafe-sdk
