@@ -1,0 +1,62 @@
+environments:
+  - name: local-test
+    hosts: ["localhost:6333", "127.0.0.1:6333"]
+    sensitivity: local
+  - name: shared-dev
+    hosts: ["localhost:6335", "127.0.0.1:6335"]
+    sensitivity: shared
+  - name: shared-dev-tunnel
+    hosts: ["localhost:6334", "127.0.0.1:6334"]
+    sensitivity: shared
+    notes: "Looks local. Forwards to shared-dev."
+
+tools:
+  # Decora MCP — no Qdrant wipe path
+  - name: search_catalog
+    kind: read-only
+    targets: [shared-dev]
+    notes: "Reads Qdrant with the read-only key."
+  - name: catalog://sku/{sku}
+    kind: read-only
+    targets: []
+  - name: project://{context_key}
+    kind: read-only
+    targets: []
+  - name: update_project
+    kind: write
+    targets: []
+    notes: "In-memory project store, not Qdrant."
+  - name: apply_board
+    kind: write
+    targets: []
+  - name: request_approval
+    kind: write
+    targets: []
+    notes: "Asks the host to pause. Model cannot call approve."
+  - name: approve
+    kind: write
+    targets: []
+    notes: "Host route only. Not an MCP tool."
+
+  # Coding-agent / Qdrant — this is the incident surface
+  - name: qdrant.collections.get
+    kind: read-only
+    match: "GET /collections"
+    targets: [local-test, shared-dev, shared-dev-tunnel]
+  - name: qdrant.collection.delete
+    kind: destructive
+    match: "DELETE /collections/{name}"
+    targets: [local-test, shared-dev, shared-dev-tunnel]
+  - name: ingest_catalog
+    kind: write
+    match: "python scripts/ingest_catalog.py --environment"
+    targets: [local-test, shared-dev, shared-dev-tunnel]
+    notes: "Becomes destructive if it drops the collection on vector-size mismatch."
+  - name: ingest_catalog.recreate
+    kind: destructive
+    match: "delete_collection / create_collection"
+    targets: [local-test, shared-dev, shared-dev-tunnel]
+  - name: docker.compose.down.volumes
+    kind: destructive
+    match: "docker compose down -v"
+    targets: [local-test, shared-dev]
