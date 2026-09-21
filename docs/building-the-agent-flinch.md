@@ -12,7 +12,7 @@ He called that missing pause the flinch, and with Jev in hand I wanted to see wh
 
 His team made three changes the same day. No destructive operation runs without a human confirming the target, shared environments never sit inside an agent's working session, and read-only is enforced by access control rather than by an instruction in a prompt.
 
-The Decora chat path already keeps shared-dev behind a read-only key. The coding-agent path is where a full-access key and a local-looking port can still meet, so that is where the pause has to live, and where the other two fixes become checks the host can run.
+The [Decora](https://github.com/arober39/decor-agent) chat path already keeps shared-dev behind a read-only key. The coding-agent path is where a full-access key and a local-looking port can still meet, so that is where the pause has to live, and where the other two fixes become checks the host can run.
 
 ## What Jev is
 
