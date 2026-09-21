@@ -130,6 +130,65 @@ def search_products(
     category: str = "",
     room_type: str = "",
     max_price_cents: int | None = None,
+    avoid: str = "",
+    limit: int = 5,
+) -> list[Product]:
+    from app.semantic_search import search_semantic
+
+    hits = search_semantic(
+        query=query,
+        category=category,
+        room_type=room_type,
+        max_price_cents=max_price_cents,
+        avoid=avoid,
+        limit=limit,
+    )
+    keyword = _keyword_search(
+        query=query,
+        category=category,
+        room_type=room_type,
+        max_price_cents=max_price_cents,
+        avoid=avoid,
+        limit=limit,
+    )
+    cap = max(1, min(limit, 12))
+    keyword_skus = {product.sku for product in keyword}
+    merged: list[Product] = []
+    seen: set[str] = set()
+    for product in hits:
+        if product.sku in seen:
+            continue
+        seen.add(product.sku)
+        merged.append(product)
+        if len(merged) >= cap:
+            break
+    for product in keyword:
+        if product.sku in seen:
+            continue
+        if len(merged) >= cap:
+            drop_at = next(
+                (
+                    index
+                    for index in range(len(merged) - 1, -1, -1)
+                    if merged[index].sku not in keyword_skus
+                ),
+                None,
+            )
+            if drop_at is None:
+                break
+            seen.discard(merged[drop_at].sku)
+            merged.pop(drop_at)
+        seen.add(product.sku)
+        merged.append(product)
+    return merged
+
+
+def _keyword_search(
+    query: str = "",
+    category: str = "",
+    room_type: str = "",
+    max_price_cents: int | None = None,
+    avoid: str = "",
     limit: int = 5,
 ) -> list[Product]:
     tokens = []
@@ -143,12 +202,16 @@ def search_products(
         if folded:
             tokens.append(folded)
     scored: list[tuple[int, Product]] = []
+    from app.embeddings import excluded_by_avoid
+
     for product in PRODUCTS:
         if category and product.category != category.lower():
             continue
         if room_type and room_type.lower() not in product.room_types:
             continue
         if max_price_cents is not None and product.price_cents > max_price_cents:
+            continue
+        if excluded_by_avoid(product, avoid):
             continue
         exact = {
             _fold(product.sku),
