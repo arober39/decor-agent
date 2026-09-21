@@ -34,6 +34,7 @@ def search_catalog(
     category: str = "",
     room_type: str = "",
     max_price_dollars: float | None = None,
+    avoid: str = "",
     limit: int = 5,
 ) -> dict:
     """Search the furniture catalog. Returns only real SKUs that exist in inventory.
@@ -42,6 +43,7 @@ def search_catalog(
     category: optional filter (sofa, chair, table, bed, desk, rug, lighting, storage, paint, decor, hardware).
     room_type: optional filter (living, bedroom, kitchen, dining, bathroom, office).
     max_price_dollars: optional price ceiling.
+    avoid: optional tokens or SKUs to drop from results.
     """
     max_cents = None
     if max_price_dollars is not None:
@@ -51,6 +53,7 @@ def search_catalog(
         category=category,
         room_type=room_type,
         max_price_cents=max_cents,
+        avoid=avoid,
         limit=limit,
     )
     return {"matches": [product.as_dict() for product in matches]}
