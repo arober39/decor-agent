@@ -1,0 +1,10 @@
+---
+description: Park out-of-scope Decora product issues in the backlog instead of fixing them mid-slice
+alwaysApply: true
+---
+
+When a Decora behavior problem shows up that is **not** the current slice (semantic search, Qdrant envs, Jev/LaunchDarkly flinch), do not implement a fix unless the user switches goals.
+
+Append it to `docs/decora-backlog.md` under Open: what we saw, why it matters, likely files. If it is already listed, add a dated “seen again” note instead of a duplicate.
+
+Do not mix backlog drive-bys into guardrail or ingestion PRs.
