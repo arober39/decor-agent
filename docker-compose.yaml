@@ -1,0 +1,32 @@
+services:
+  qdrant-local-test:
+    image: qdrant/qdrant:v1.15.1
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_local_test:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_LOCAL_API_KEY}
+      QDRANT__SERVICE__READ_ONLY_API_KEY: ${QDRANT_LOCAL_READ_ONLY_API_KEY}
+
+  qdrant-shared-dev:
+    image: qdrant/qdrant:v1.15.1
+    ports:
+      - "6335:6333"
+    volumes:
+      - qdrant_shared_dev:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_SHARED_API_KEY}
+      QDRANT__SERVICE__READ_ONLY_API_KEY: ${QDRANT_SHARED_READ_ONLY_API_KEY}
+
+  qdrant-shared-tunnel:
+    image: alpine/socat
+    command: TCP-LISTEN:6334,fork,reuseaddr TCP:qdrant-shared-dev:6333
+    ports:
+      - "6334:6334"
+    depends_on:
+      - qdrant-shared-dev
+
+volumes:
+  qdrant_local_test:
+  qdrant_shared_dev:
