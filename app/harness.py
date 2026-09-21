@@ -20,6 +20,7 @@ from app.flags import (
     get_completion_config,
     set_current_context_key,
 )
+from app.flinch_gate import call_tool as flinch_call_tool
 from app.llm import get_llm
 from app.logging import get_logger
 from app.nodes.input_guard import input_guard
@@ -291,10 +292,15 @@ def _revision_hits(user_message: str, category: str, messages: list, room_type: 
     return filtered
 
 
-async def _request_spec_approval(client: Client, context_key: str, summary: str) -> dict:
-    await client.call_tool(
+async def _request_spec_approval(
+    client: Client, context_key: str, summary: str, stated_intent: str
+) -> dict:
+    await flinch_call_tool(
+        client,
         "request_approval",
         {"context_key": context_key, "kind": "spec", "summary": summary},
+        context_key=context_key,
+        stated_intent=stated_intent,
     )
     return await _read_project(client, context_key)
 
@@ -325,17 +331,20 @@ async def persist_revision(
         if not removed:
             return project, f"Nothing in {category} is on the list to drop."
         for item in removed:
-            await client.call_tool(
+            await flinch_call_tool(
+                client,
                 "update_project",
                 {
                     "context_key": context_key,
                     "action": "remove_spec",
                     "sku": item["sku"],
                 },
+                context_key=context_key,
+                stated_intent=user_message,
             )
         names = ", ".join(f"{item.get('name')} ({item.get('sku')})" for item in removed)
         project = await _request_spec_approval(
-            client, context_key, f"Removed {names}."
+            client, context_key, f"Removed {names}.", user_message
         )
         return project, f"Removed {names} from the draft spec."
 
@@ -347,6 +356,7 @@ async def persist_revision(
                 client,
                 context_key,
                 f"{match.name} ({match.sku}) is already on the list.",
+                user_message,
             )
             return (
                 project,
@@ -365,6 +375,7 @@ async def persist_revision(
             client,
             context_key,
             f"{match.name} ({match.sku}) is already the {match.color} {match.category}.",
+            user_message,
         )
         return (
             project,
@@ -385,15 +396,19 @@ async def persist_revision(
     match = incoming[0]
     for item in spec_items:
         if item.get("category") == match.category and item.get("sku") != match.sku:
-            await client.call_tool(
+            await flinch_call_tool(
+                client,
                 "update_project",
                 {
                     "context_key": context_key,
                     "action": "remove_spec",
                     "sku": item["sku"],
                 },
+                context_key=context_key,
+                stated_intent=user_message,
             )
-    await client.call_tool(
+    await flinch_call_tool(
+        client,
         "update_project",
         {
             "context_key": context_key,
@@ -403,11 +418,14 @@ async def persist_revision(
             "lane": "close",
             "why": f"Client swap to {match.color} {match.category}",
         },
+        context_key=context_key,
+        stated_intent=user_message,
     )
     project = await _request_spec_approval(
         client,
         context_key,
         f"Swapped {match.category} to {match.name} ({match.sku}).",
+        user_message,
     )
     return project, f"Swapped the {match.category} to {match.name} ({match.sku})."
 
@@ -422,16 +440,20 @@ async def persist_talked_about_project(
     """Write project:// from this turn when the model searched but forgot to persist."""
     facts = parse_job_facts(user_message)
     if facts.get("budget_dollars") is not None:
-        await client.call_tool(
+        await flinch_call_tool(
+            client,
             "update_project",
             {
                 "context_key": context_key,
                 "action": "set_budget",
                 "budget_dollars": facts["budget_dollars"],
             },
+            context_key=context_key,
+            stated_intent=user_message,
         )
     if facts.get("room_name"):
-        await client.call_tool(
+        await flinch_call_tool(
+            client,
             "update_project",
             {
                 "context_key": context_key,
@@ -441,15 +463,20 @@ async def persist_talked_about_project(
                 "width_ft": facts.get("width_ft"),
                 "length_ft": facts.get("length_ft"),
             },
+            context_key=context_key,
+            stated_intent=user_message,
         )
     if facts.get("style_preferences"):
-        await client.call_tool(
+        await flinch_call_tool(
+            client,
             "update_project",
             {
                 "context_key": context_key,
                 "action": "set_brief",
                 "style_preferences": facts["style_preferences"],
             },
+            context_key=context_key,
+            stated_intent=user_message,
         )
     project = await _read_project(client, context_key)
     if parse_revision_intent(user_message):
@@ -460,7 +487,8 @@ async def persist_talked_about_project(
     to_add = skus_named_in_text(commentary, found) or found[:4]
     room = facts.get("room_name") or _project_room_name(project)
     for sku in to_add:
-        await client.call_tool(
+        await flinch_call_tool(
+            client,
             "update_project",
             {
                 "context_key": context_key,
@@ -468,6 +496,8 @@ async def persist_talked_about_project(
                 "sku": sku,
                 "room_name": room,
             },
+            context_key=context_key,
+            stated_intent=user_message,
         )
     if to_add:
         log.info("harness.persisted_project", context_key=context_key, skus=to_add)
@@ -610,7 +640,13 @@ async def _run(message: str, context_key: str) -> dict:
                     payload = APPLY_BOARD_REFUSAL
                     log.info("harness.apply_board_refused", reason="not_sample_board_ask")
                 else:
-                    result = await client.call_tool(name, args)
+                    result = await flinch_call_tool(
+                        client,
+                        name,
+                        args,
+                        context_key=context_key,
+                        stated_intent=message,
+                    )
                     payload = parse_mcp_payload(result)
                     if name == "apply_board":
                         executed_apply_board = True
