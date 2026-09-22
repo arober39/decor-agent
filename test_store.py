@@ -1,7 +1,11 @@
+import tempfile
+from pathlib import Path
+
 from app import store
 
 
 def setup_function() -> None:
+    store.disable_persist()
     store.reset()
 
 
@@ -83,6 +87,31 @@ def test_fit_budget_keeps_must_lines() -> None:
     assert "RUG-8X10-RST" in skus
     assert "RUG-BATH-TER" not in skus
     assert project.over_budget is False
+
+
+def test_rooms_persist_across_reload() -> None:
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "projects.json"
+        store.disable_persist()
+        store.reset()
+        store.enable_persist(path)
+        try:
+            created = store.create_room("Living room")
+            key = created.context_key
+            store.append_transcript(key, "user", "keep the oak")
+            store.set_budget(key, 2000)
+            store.reset()
+            store.enable_persist(path)
+            rooms = store.list_rooms()
+            assert [room["context_key"] for room in rooms] == [key]
+            assert rooms[0]["name"] == "Living room"
+            assert rooms[0]["budget_cents"] == 200000
+            assert store.transcript(key) == [{"role": "user", "text": "keep the oak"}]
+            renamed = store.rename_room(key, "Den")
+            assert renamed.rooms["den"].name == "Den"
+        finally:
+            store.disable_persist()
+            store.reset()
 
 
 def test_swap_spec_rejects_bathroom_mat_for_living_rug() -> None:

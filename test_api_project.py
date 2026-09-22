@@ -1,3 +1,7 @@
+import os
+
+os.environ["DECORA_PERSIST"] = "0"
+
 from fastapi.testclient import TestClient
 
 from app import store
@@ -5,6 +9,7 @@ from server import app
 
 
 def setup_function() -> None:
+    store.disable_persist()
     store.reset()
 
 
@@ -20,6 +25,8 @@ def test_studio_and_catalog_routes() -> None:
     assert b"starter brief" in studio.content
     assert b"sample board" in studio.content
     assert b"start-guide" in studio.content
+    assert b"My rooms" in studio.content
+    assert b"room-create" in studio.content
     assert catalog.status_code == 200
     products = catalog.json()["products"]
     assert len(products) == 4
@@ -68,7 +75,44 @@ def test_fit_budget_route_drops_the_close_rug() -> None:
     assert body["budget"]["over_budget"] is False
 
 
+def test_rooms_create_list_and_rename() -> None:
+    client = TestClient(app)
+    created = client.post("/api/rooms", json={"name": "Living room"})
+    assert created.status_code == 200
+    body = created.json()
+    key = body["context_key"]
+    assert body["rooms"]["living room"]["name"] == "Living room"
+
+    listed = client.get("/api/rooms")
+    assert listed.status_code == 200
+    assert any(room["context_key"] == key for room in listed.json()["rooms"])
+
+    renamed = client.post("/api/rooms/rename", json={"context_key": key, "name": "Den"})
+    assert renamed.status_code == 200
+    assert renamed.json()["rooms"]["den"]["name"] == "Den"
+    assert client.get("/api/project", params={"context_key": key}).json()["transcript"] == []
+
+
+def test_chat_transcript_survives_project_read() -> None:
+    client = TestClient(app)
+    created = client.post("/api/rooms", json={"name": "Office"})
+    key = created.json()["context_key"]
+    chat = client.post(
+        "/api/chat",
+        json={"message": "warm minimalist low-pile rug, pet-friendly", "context_key": key},
+    )
+    assert chat.status_code == 200
+    assert chat.json()["metadata"]["stop_reason"] == "catalog_only"
+    project = client.get("/api/project", params={"context_key": key}).json()
+    roles = [item["role"] for item in project["transcript"]]
+    assert roles == ["user", "assistant"]
+    assert "RUG-8X10-RST" in project["transcript"][1]["text"]
+    assert project["spec_list"] == []
+
+
 if __name__ == "__main__":
-    setup_function()
-    test_from_board_then_approve()
-    print("PASS test_api_project")
+    for name, fn in list(globals().items()):
+        if name.startswith("test_"):
+            setup_function()
+            fn()
+            print(f"PASS {name}")

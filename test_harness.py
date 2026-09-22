@@ -1,3 +1,7 @@
+import os
+
+os.environ["DECORA_PERSIST"] = "0"
+
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.harness import (
@@ -7,6 +11,8 @@ from app.harness import (
     commentary_from_project,
     inject_context_key,
     inject_job_facts,
+    is_brief_confirmation,
+    is_catalog_only_ask,
     parse_job_facts,
     parse_revision_intent,
     persist_talked_about_project,
@@ -14,6 +20,7 @@ from app.harness import (
     run_agent_async,
     search_skus_from_messages,
     skus_named_in_text,
+    style_budget_decision,
 )
 from app import store
 from mcp import Client
@@ -139,6 +146,11 @@ def test_parse_revision_intent_swap_lamp() -> None:
     )
     assert intent == {"kind": "swap", "category": "lighting"}
     assert parse_revision_intent("hello") is None
+    assert parse_revision_intent("yes replace") is None
+    assert parse_revision_intent("replace the sofa") == {"kind": "swap", "category": "sofa"}
+    assert is_brief_confirmation("yes replace")
+    assert is_brief_confirmation("replace the brief")
+    assert not is_brief_confirmation("replace the sofa")
 
 
 def test_host_swap_keeps_arca_when_it_is_already_the_brass_lamp() -> None:
@@ -212,6 +224,139 @@ def test_host_does_not_swap_living_rug_for_bath_mat() -> None:
             assert "RUG-8X10-IVO" in note
 
     anyio.run(inner)
+
+
+def test_yes_replace_updates_the_brief_not_a_sku() -> None:
+    store.reset()
+    store.upsert_room("brief-1", name="living room", room_type="living", width_ft=10, length_ft=12)
+    store.set_budget("brief-1", 1500)
+    store.set_brief("brief-1", style_preferences="modern")
+    store.add_spec("brief-1", "ART-SOFA-721", "living room")
+    store.remember_message("brief-1", "12x14 living room, $2000, midcentury")
+
+    async def inner() -> None:
+        async with Client(server) as client:
+            project, note = await persist_talked_about_project(
+                client,
+                "brief-1",
+                "yes replace",
+                [],
+                "Which piece should I swap?",
+            )
+            assert project["budget"]["total_cents"] == 200000
+            assert project["brief"]["style_preferences"] == "mid-century"
+            assert project["rooms"]["living room"]["width_ft"] == 12
+            assert [item["sku"] for item in project["spec_list"]] == ["ART-SOFA-721"]
+            assert note is not None
+            assert "Updated this job" in note
+            assert "piece" not in note.lower()
+
+    anyio.run(inner)
+
+
+def test_same_thread_budget_and_style_overwrite() -> None:
+    store.reset()
+    store.upsert_room("drift-1", name="living room", room_type="living")
+    store.set_budget("drift-1", 1500)
+    store.set_brief("drift-1", style_preferences="modern")
+    store.add_spec("drift-1", "ART-SOFA-721", "living room")
+
+    async def inner() -> None:
+        async with Client(server) as client:
+            project, note = await persist_talked_about_project(
+                client,
+                "drift-1",
+                "12x14 living room, $2000, midcentury",
+                [],
+                "That conflicts with the $1500 project. Which piece should I replace?",
+            )
+            assert project["budget"]["total_cents"] == 200000
+            assert project["brief"]["style_preferences"] == "mid-century"
+            assert [item["sku"] for item in project["spec_list"]] == ["ART-SOFA-721"]
+            assert note is not None
+            assert "Updated this job" in note
+            assert "$2000" in note
+
+    anyio.run(inner)
+
+
+def test_style_budget_keeps_midcentury_sofa() -> None:
+    message = "12x14 living room, $2000, midcentury, warm minimalist, low-pile pet-friendly rug"
+    chosen, note = style_budget_decision(
+        ["IKE-SOFA-KL1", "RUG-8X10-RST", "ART-COF-48R"],
+        message,
+        "mid-century",
+        200000,
+        "living",
+    )
+    assert chosen == ["ART-SOFA-721", "RUG-8X10-RST", "ART-COF-48R"]
+    assert note is not None
+    assert "ART-SOFA-721" in note
+    assert "IKE-SOFA-KL1" in note
+    assert "do not both fit" in note
+
+    already, over_note = style_budget_decision(
+        ["ART-SOFA-721", "RUG-8X10-RST", "ART-COF-48R"],
+        message,
+        "mid-century",
+        200000,
+        "living",
+    )
+    assert "ART-SOFA-721" in already
+    assert "IKE-SOFA-KL1" not in already
+    assert over_note is not None
+    assert "IKE-SOFA-KL1" in over_note
+    assert "ART-SOFA-721" in over_note
+
+
+def test_persist_keeps_style_match_when_commentary_picks_kivik() -> None:
+    store.reset()
+
+    async def inner() -> None:
+        async with Client(server) as client:
+            messages = [
+                ToolMessage(
+                    content=(
+                        '{"matches": ['
+                        '{"sku": "IKE-SOFA-KL1", "name": "KIVIK 3-seat sofa"},'
+                        '{"sku": "RUG-8X10-RST", "name": "Low-pile 8x10 rug, rust"},'
+                        '{"sku": "ART-COF-48R", "name": "Seno 48-inch round coffee table"}'
+                        "]}"
+                    ),
+                    tool_call_id="1",
+                    name="search_catalog",
+                )
+            ]
+            project, note = await persist_talked_about_project(
+                client,
+                "style-1",
+                "12x14 living room, $2000, midcentury, warm minimalist, low-pile pet-friendly rug",
+                messages,
+                "KIVIK 3-seat sofa, Low-pile 8x10 rug, rust, and Seno 48-inch round coffee table.",
+            )
+            skus = [item["sku"] for item in project["spec_list"]]
+            assert skus == ["ART-SOFA-721", "RUG-8X10-RST", "ART-COF-48R"]
+            assert note is not None
+            assert "ART-SOFA-721" in note
+            assert "IKE-SOFA-KL1" in note
+            assert "do not both fit" in note
+
+    anyio.run(inner)
+
+
+def test_catalog_only_rug_does_not_ask_for_a_brief() -> None:
+    assert is_catalog_only_ask("warm minimalist low-pile rug, pet-friendly")
+    assert not is_catalog_only_ask(
+        "Plan a 12x14 living room with a $2000 budget. Keep it mid-century."
+    )
+    store.reset()
+    out = run_agent("warm minimalist low-pile rug, pet-friendly", "rug-only")
+    assert out["metadata"]["stop_reason"] == "catalog_only"
+    assert "RUG-8X10-RST" in out["response"]
+    assert "?" not in out["response"]
+    project = store.snapshot("rug-only")
+    assert project["spec_list"] == []
+    assert project["budget"]["total_cents"] is None
 
 
 def test_inject_context_key() -> None:
@@ -294,6 +439,16 @@ if __name__ == "__main__":
     print("PASS test_persist_writes_named_search_hits")
     test_parse_revision_intent_swap_lamp()
     print("PASS test_parse_revision_intent_swap_lamp")
+    test_yes_replace_updates_the_brief_not_a_sku()
+    print("PASS test_yes_replace_updates_the_brief_not_a_sku")
+    test_same_thread_budget_and_style_overwrite()
+    print("PASS test_same_thread_budget_and_style_overwrite")
+    test_style_budget_keeps_midcentury_sofa()
+    print("PASS test_style_budget_keeps_midcentury_sofa")
+    test_persist_keeps_style_match_when_commentary_picks_kivik()
+    print("PASS test_persist_keeps_style_match_when_commentary_picks_kivik")
+    test_catalog_only_rug_does_not_ask_for_a_brief()
+    print("PASS test_catalog_only_rug_does_not_ask_for_a_brief")
     test_host_swap_keeps_arca_when_it_is_already_the_brass_lamp()
     print("PASS test_host_swap_keeps_arca_when_it_is_already_the_brass_lamp")
     test_host_swap_replaces_sofa_when_inventory_has_another()

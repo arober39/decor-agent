@@ -1,17 +1,102 @@
-"""In-memory project store. Lives behind the MCP server, not the chat host."""
+"""Project store. Memory by default; the server can persist rooms to a JSON file."""
 
 from __future__ import annotations
 
+import json
 import threading
+import uuid
+from pathlib import Path
 
 from app.board import resolve_sample_board
 from app.catalog import cheaper_in_room, get_product
 from app.events import SPEC_APPROVED, SPEC_SAVED, track
-from app.project import ApprovalKind, DesignProject, Room, SkippedPin, SpecItem, SpecLane
+from app.project import (
+    ApprovalKind,
+    DesignProject,
+    Room,
+    SkippedPin,
+    SpecItem,
+    SpecLane,
+    set_refresh_hook,
+)
 
 
 _lock = threading.Lock()
 _projects: dict[str, DesignProject] = {}
+_transcripts: dict[str, list[dict[str, str]]] = {}
+_priors: dict[str, str] = {}
+_persist_path: Path | None = None
+
+
+def _guess_room_type(name: str) -> str:
+    lower = name.lower()
+    for room in ("living", "bedroom", "kitchen", "dining", "bathroom", "office"):
+        if room in lower:
+            return room
+    return "living"
+
+
+def _worth_saving(project: DesignProject) -> bool:
+    brief = project.brief
+    return bool(
+        project.rooms
+        or project.spec_list
+        or project.budget_total_cents is not None
+        or brief.lifestyle
+        or brief.style_preferences
+        or brief.keep
+        or brief.avoid
+        or project.board_pins
+        or project.rejected
+        or project.skipped
+    )
+
+
+def _save() -> None:
+    if _persist_path is None:
+        return
+    _persist_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "projects": {
+            key: project.model_dump(mode="json")
+            for key, project in _projects.items()
+            if _worth_saving(project)
+        },
+        "transcripts": {key: rows for key, rows in _transcripts.items() if rows},
+        "priors": {key: text for key, text in _priors.items() if text},
+    }
+    _persist_path.write_text(json.dumps(payload, indent=2))
+
+
+def _load() -> None:
+    if _persist_path is None or not _persist_path.exists():
+        return
+    payload = json.loads(_persist_path.read_text())
+    _projects.clear()
+    for key, data in (payload.get("projects") or {}).items():
+        _projects[key] = DesignProject.model_validate(data)
+    _transcripts.clear()
+    _transcripts.update(payload.get("transcripts") or {})
+    _priors.clear()
+    _priors.update(payload.get("priors") or {})
+
+
+def enable_persist(path: str | Path | None = None) -> None:
+    """Load rooms from disk and write them back on each mutation."""
+    global _persist_path
+    if path is None:
+        _persist_path = Path(__file__).resolve().parents[1] / "data" / "projects.json"
+    else:
+        _persist_path = Path(path)
+    _load()
+
+
+def disable_persist() -> None:
+    global _persist_path
+    _persist_path = None
+
+
+set_refresh_hook(lambda _project: _save())
 
 
 def get_or_create(context_key: str) -> DesignProject:
@@ -24,11 +109,102 @@ def get_or_create(context_key: str) -> DesignProject:
 
 
 def reset(context_key: str | None = None) -> None:
+    """Clear memory. Does not delete a persist file; the next load reads it again."""
     with _lock:
         if context_key is None:
             _projects.clear()
+            _transcripts.clear()
+            _priors.clear()
         else:
             _projects.pop(context_key, None)
+            _transcripts.pop(context_key, None)
+            _priors.pop(context_key, None)
+
+
+def peek_prior(context_key: str) -> str:
+    return _priors.get(context_key, "")
+
+
+def remember_message(context_key: str, message: str) -> None:
+    text = (message or "").strip()
+    if not text:
+        return
+    _priors[context_key] = text
+    _save()
+
+
+def transcript(context_key: str) -> list[dict[str, str]]:
+    return list(_transcripts.get(context_key, []))
+
+
+def append_transcript(context_key: str, role: str, text: str) -> None:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return
+    _transcripts.setdefault(context_key, []).append({"role": role, "text": cleaned})
+    _save()
+
+
+def list_rooms() -> list[dict]:
+    rows = []
+    keys = list(dict.fromkeys([*_projects.keys(), *_transcripts.keys()]))
+    for key in keys:
+        project = _projects.get(key)
+        transcript_rows = _transcripts.get(key) or []
+        if project and project.rooms:
+            room = next(iter(project.rooms.values()))
+            name = room.name
+            status = project.status
+            budget = project.budget_total_cents
+        elif transcript_rows or (project is not None and _worth_saving(project)):
+            name = "Untitled room"
+            status = project.status if project is not None else "intake"
+            budget = project.budget_total_cents if project is not None else None
+        else:
+            continue
+        rows.append(
+            {
+                "context_key": key,
+                "name": name,
+                "status": status,
+                "budget_cents": budget,
+            }
+        )
+    rows.sort(key=lambda row: row["name"].lower())
+    return rows
+
+
+def create_room(name: str) -> DesignProject:
+    cleaned = name.strip()
+    if not cleaned:
+        raise ValueError("Room name is required")
+    return upsert_room(
+        str(uuid.uuid4()),
+        name=cleaned,
+        room_type=_guess_room_type(cleaned),
+    )
+
+
+def rename_room(context_key: str, name: str) -> DesignProject:
+    cleaned = name.strip()
+    if not cleaned:
+        raise ValueError("Room name is required")
+    project = get_or_create(context_key)
+    if len(project.rooms) != 1:
+        return upsert_room(
+            context_key,
+            name=cleaned,
+            room_type=_guess_room_type(cleaned),
+        )
+    _old_key, room = next(iter(project.rooms.items()))
+    project.rooms.clear()
+    room.name = cleaned
+    room.room_type = _guess_room_type(cleaned)
+    project.rooms[project.room_key(cleaned)] = room
+    for item in project.spec_list:
+        item.room = cleaned
+    project.refresh_status()
+    return project
 
 
 def snapshot(context_key: str) -> dict:

@@ -1,3 +1,4 @@
+import os
 import time
 import traceback
 import uuid
@@ -57,6 +58,15 @@ class ProjectRequest(BaseModel):
     to_sku: str = ""
 
 
+class RoomCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class RoomRename(BaseModel):
+    context_key: str
+    name: str = Field(min_length=1, max_length=80)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
@@ -67,6 +77,10 @@ async def lifespan(app: FastAPI):
         init_client()
     except ImportError:
         pass
+    if os.environ.get("DECORA_PERSIST", "1") == "0":
+        store.disable_persist()
+    else:
+        store.enable_persist(os.environ.get("DECORA_STORE_PATH") or None)
     log.info("server.started", version=VERSION)
     try:
         yield
@@ -182,6 +196,7 @@ async def chat(req: ChatRequest) -> JSONResponse:
         )
         return JSONResponse(status_code=200, content=body.model_dump())
 
+    store.append_transcript(context_key, "user", req.message)
     try:
         result = await run_agent_async(req.message, context_key=context_key)
     except Exception as exc:
@@ -201,10 +216,14 @@ async def chat(req: ChatRequest) -> JSONResponse:
             },
         )
 
+    store.append_transcript(context_key, "assistant", result["response"])
+    project = result.get("project") or store.snapshot(context_key)
+    project = dict(project)
+    project["transcript"] = store.transcript(context_key)
     body = ChatResponse(
         response=result["response"],
         metadata=result["metadata"],
-        project=result.get("project") or store.snapshot(context_key),
+        project=project,
         message_id=message_id,
         timestamp=timestamp,
     )
@@ -229,7 +248,38 @@ async def capabilities(context_key: str = "anonymous") -> dict:
 
 @app.get("/api/project")
 async def get_project(context_key: str) -> dict:
-    return store.snapshot(context_key)
+    data = store.snapshot(context_key)
+    data["transcript"] = store.transcript(context_key)
+    return data
+
+
+@app.get("/api/rooms")
+async def list_rooms() -> dict:
+    return {"rooms": store.list_rooms()}
+
+
+@app.post("/api/rooms")
+async def create_room(req: RoomCreate) -> dict:
+    try:
+        project = store.create_room(req.name)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+    data = project.as_public_dict()
+    data["transcript"] = store.transcript(project.context_key)
+    log.info("room.created", context_key=project.context_key, name=req.name)
+    return data
+
+
+@app.post("/api/rooms/rename")
+async def rename_room(req: RoomRename) -> dict:
+    try:
+        project = store.rename_room(req.context_key, req.name)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+    data = project.as_public_dict()
+    data["transcript"] = store.transcript(req.context_key)
+    log.info("room.renamed", context_key=req.context_key, name=req.name)
+    return data
 
 
 @app.post("/api/project/from-board")

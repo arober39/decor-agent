@@ -36,8 +36,22 @@ function loadContextKey() {
   }
 }
 
-const contextKey = loadContextKey();
+function readRoomKey() {
+  const param = new URLSearchParams(location.search).get("room");
+  if (param) {
+    try {
+      localStorage.setItem(CONTEXT_STORAGE_KEY, param);
+    } catch {
+      // private mode
+    }
+    return param;
+  }
+  return loadContextKey();
+}
+
+let contextKey = readRoomKey();
 let selectedPin = "";
+let transcriptReady = false;
 
 function boardMappedKey() {
   return `${BOARD_MAPPED_PREFIX}${contextKey}`;
@@ -191,6 +205,10 @@ function renderProject(project) {
   document.getElementById("project-status").textContent = prettyStatus(project.status);
   const rooms = Object.values(project.rooms || {});
   document.getElementById("project-room").textContent = rooms[0]?.name || "No room yet";
+  const renameInput = document.getElementById("room-rename-input");
+  if (renameInput && document.activeElement !== renameInput) {
+    renameInput.value = rooms[0]?.name || "";
+  }
 
   const budget = project.budget || {};
   const locked = listIsLocked(project);
@@ -292,6 +310,7 @@ function renderProject(project) {
   setHidden("approval-actions", !showApprove);
   setHidden("list-actions", !showApprove);
   renderBoard(project);
+  loadRooms();
 }
 
 async function mutateProject(path, extra) {
@@ -318,14 +337,81 @@ async function loadCapabilities() {
   }
 }
 
-async function hydrateProject() {
+function syncRoomUrl(key, replace) {
+  const url = new URL(location.href);
+  if (url.searchParams.get("room") === key) return;
+  url.searchParams.set("room", key);
+  const next = `${url.pathname}${url.search}`;
+  if (replace) history.replaceState({}, "", next);
+  else history.pushState({}, "", next);
+}
+
+function renderTranscript(items) {
+  messages.innerHTML = "";
+  if (!items.length) {
+    appendMessage("bot", WELCOME, "welcome");
+    return;
+  }
+  for (const item of items) {
+    appendMessage(item.role === "user" ? "user" : "bot", item.text);
+  }
+}
+
+async function loadRooms() {
+  const list = document.getElementById("room-items");
+  if (!list) return;
+  try {
+    const response = await fetch("/api/rooms");
+    if (!response.ok) return;
+    const data = await response.json();
+    const rooms = data.rooms || [];
+    if (!rooms.length) {
+      list.innerHTML = '<li class="muted">No rooms yet.</li>';
+      return;
+    }
+    list.innerHTML = rooms
+      .map((room) => {
+        const current = room.context_key === contextKey ? " current" : "";
+        return `<li><button type="button" class="room-chip${current}" data-room="${escapeHtml(room.context_key)}">${escapeHtml(room.name)}</button></li>`;
+      })
+      .join("");
+  } catch {
+    list.innerHTML = '<li class="muted">Rooms are unavailable.</li>';
+  }
+}
+
+function openRoom(key) {
+  if (!key || key === contextKey) return;
+  contextKey = key;
+  try {
+    localStorage.setItem(CONTEXT_STORAGE_KEY, key);
+  } catch {
+    // private mode
+  }
+  selectedPin = "";
+  transcriptReady = false;
+  syncRoomUrl(key, false);
+  messages.innerHTML = "";
+  hydrateProject({ reloadTranscript: true });
+}
+
+async function hydrateProject({ reloadTranscript = false } = {}) {
   try {
     const response = await fetch(`/api/project?context_key=${encodeURIComponent(contextKey)}`);
     if (!response.ok) return;
-    renderProject(await response.json());
+    const project = await response.json();
+    renderProject(project);
+    if (reloadTranscript || !transcriptReady) {
+      renderTranscript(project.transcript || []);
+      transcriptReady = true;
+    }
   } catch {
-    // Intake empty state is the fallback.
+    if (!transcriptReady) {
+      renderTranscript([]);
+      transcriptReady = true;
+    }
   }
+  loadRooms();
 }
 
 async function sendChat(message) {
@@ -359,9 +445,9 @@ async function sendChat(message) {
   }
 }
 
-appendMessage("bot", WELCOME, "welcome");
+syncRoomUrl(contextKey, true);
 loadCapabilities();
-hydrateProject();
+hydrateProject({ reloadTranscript: true });
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -406,6 +492,65 @@ boardBtn.addEventListener("click", async () => {
   } finally {
     boardBtn.disabled = false;
   }
+});
+
+document.getElementById("room-items").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-room]");
+  if (!button) return;
+  openRoom(button.dataset.room);
+});
+
+document.getElementById("room-create").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = document.getElementById("room-name");
+  const name = input.value.trim();
+  if (!name) return;
+  try {
+    const response = await fetch("/api/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const project = await response.json();
+    if (!response.ok) throw new Error(project?.detail || "Could not create that room.");
+    input.value = "";
+    openRoom(project.context_key);
+  } catch (error) {
+    appendMessage("bot", `Could not create the room. ${error.message}`);
+  }
+});
+
+document.getElementById("room-rename").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = document.getElementById("room-rename-input").value.trim();
+  if (!name) return;
+  try {
+    const response = await fetch("/api/rooms/rename", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ context_key: contextKey, name }),
+    });
+    const project = await response.json();
+    if (!response.ok) throw new Error(project?.detail || "Could not rename that room.");
+    renderProject(project);
+    loadRooms();
+  } catch (error) {
+    appendMessage("bot", `Could not rename the room. ${error.message}`);
+  }
+});
+
+window.addEventListener("popstate", () => {
+  const key = new URLSearchParams(location.search).get("room");
+  if (!key || key === contextKey) return;
+  contextKey = key;
+  try {
+    localStorage.setItem(CONTEXT_STORAGE_KEY, key);
+  } catch {
+    // private mode
+  }
+  selectedPin = "";
+  transcriptReady = false;
+  hydrateProject({ reloadTranscript: true });
 });
 
 document.getElementById("board-grid").addEventListener("click", (event) => {

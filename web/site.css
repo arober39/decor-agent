@@ -435,6 +435,83 @@ input {
   letter-spacing: -0.04em;
 }
 
+.room-bar {
+  width: var(--page-width);
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 12px;
+  flex-shrink: 0;
+}
+
+.room-bar h2 {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+.room-items {
+  display: flex;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.room-items li {
+  flex-shrink: 0;
+}
+
+.room-chip {
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: inherit;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.room-chip.current {
+  background: var(--chrome);
+  color: var(--white);
+  border-color: var(--chrome);
+}
+
+.room-create,
+.room-rename {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.room-rename {
+  margin-top: 8px;
+}
+
+.room-create input,
+.room-rename input {
+  border: 1px solid var(--line);
+  background: var(--field);
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 6px 10px;
+  min-width: 0;
+}
+
+.room-create {
+  flex-shrink: 0;
+}
+
 .job-meta {
   display: flex;
   flex-direction: column;
@@ -1020,8 +1097,19 @@ input {
 
   .job-bar,
   .job-meta,
+  .room-bar,
   .site-footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .room-create,
+  .room-rename {
+    width: 100%;
+  }
+
+  .room-create input,
+  .room-rename input {
+    flex: 1;
   }
 }

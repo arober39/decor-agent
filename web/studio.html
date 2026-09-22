@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;1,400&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/web/site.css?v=board-stay" />
+    <link rel="stylesheet" href="/web/site.css?v=rooms" />
   </head>
   <body class="studio-page">
     <header class="nav">
@@ -25,6 +25,10 @@
       <div>
         <p class="muted" id="project-room">No room yet</p>
         <h1 id="project-status">Intake</h1>
+        <form id="room-rename" class="room-rename">
+          <input id="room-rename-input" type="text" maxlength="80" aria-label="Rename room" placeholder="Rename room" />
+          <button class="btn btn-ghost" type="submit">Rename</button>
+        </form>
       </div>
       <div class="job-meta">
         <p id="project-budget" class="budget">Budget not set</p>
@@ -42,6 +46,15 @@
         </div>
       </div>
     </div>
+
+    <section class="room-bar" aria-label="My rooms">
+      <h2>My rooms</h2>
+      <ul id="room-items" class="room-items"></ul>
+      <form id="room-create" class="room-create">
+        <input id="room-name" type="text" maxlength="80" placeholder="New room" aria-label="New room name" required />
+        <button class="btn btn-dark" type="submit">Create</button>
+      </form>
+    </section>
 
     <div class="studio-grid">
       <section class="panel board-panel" aria-label="Board">
@@ -163,6 +176,6 @@
       </section>
     </div>
 
-    <script src="/web/studio.js?v=keep-optional" defer></script>
+    <script src="/web/studio.js?v=rooms" defer></script>
   </body>
 </html>

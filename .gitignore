@@ -30,4 +30,5 @@ __pycache__/
 # Logs / local artifacts
 *.log
 logs/
+data/
 .langgraph_api/

@@ -11,6 +11,14 @@ SpecStatus = Literal["draft", "committed"]
 SpecLane = Literal["must", "close", "skip"]
 ProjectStatus = Literal["intake", "planning", "awaiting_approval", "complete"]
 
+_after_refresh = None
+
+
+def set_refresh_hook(fn) -> None:
+    """Store registers this so a mutation can be written to disk."""
+    global _after_refresh
+    _after_refresh = fn
+
 
 class Room(BaseModel):
     name: str
@@ -98,6 +106,8 @@ class DesignProject(BaseModel):
             self.status = "planning"
         else:
             self.status = "intake"
+        if _after_refresh is not None:
+            _after_refresh(self)
 
     def as_public_dict(self) -> dict:
         from app.board import pin_image_url

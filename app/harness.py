@@ -6,7 +6,8 @@ import json
 import re
 from typing import Any
 
-from app.catalog import PRODUCTS, get_product, room_key, search_products
+from app.catalog import PRODUCTS, cheaper_in_room, get_product, room_key, search_products
+from app import store
 
 import anyio
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -108,7 +109,6 @@ def inject_context_key(name: str, args: dict, context_key: str) -> dict:
     return filled
 
 
-_REVISION_VERBS = ("swap", "replace", "switch", "instead")
 _DROP_VERBS = ("drop ", "remove ", "take off")
 _WANT_WORDS = (
     "white",
@@ -152,22 +152,258 @@ _CATEGORY_HINTS = (
 )
 
 
-def parse_revision_intent(message: str) -> dict | None:
-    """Swap/drop language the host can honor without waiting on the model."""
+def _category_in(message: str) -> str:
     lower = f" {message.lower()} "
-    kind = ""
-    if any(verb in lower for verb in _REVISION_VERBS):
-        kind = "swap"
-    elif any(verb in lower for verb in _DROP_VERBS):
-        kind = "drop"
-    if not kind:
-        return None
-    category = ""
     for hint, mapped in _CATEGORY_HINTS:
         if hint in lower:
-            category = mapped
-            break
+            return mapped
+    return ""
+
+
+def parse_revision_intent(message: str) -> dict | None:
+    """Swap or drop a named piece. Bare "replace" is a new brief, not a SKU swap."""
+    lower = f" {message.lower()} "
+    category = _category_in(message)
+    has_swap = any(verb in lower for verb in ("swap", "switch", "instead"))
+    has_replace = "replace" in lower
+    has_drop = any(verb in lower for verb in _DROP_VERBS)
+    if has_drop and not has_swap and not (has_replace and category):
+        kind = "drop"
+    elif has_swap or (has_replace and category):
+        kind = "swap"
+    else:
+        return None
     return {"kind": kind, "category": category}
+
+
+def is_brief_confirmation(message: str) -> bool:
+    """'yes replace' confirms a new room, budget, or style. It does not name a piece."""
+    if parse_revision_intent(message):
+        return False
+    lower = " ".join((message or "").lower().split())
+    return (
+        re.fullmatch(
+            r"(yes[, ]+)?(please )?replace( (it|the brief|the job|this|the project|the room|the budget|the style))?[.!]?",
+            lower,
+        )
+        is not None
+    )
+
+
+def catalog_category(message: str) -> str:
+    return _category_in(message)
+
+
+def is_catalog_only_ask(message: str) -> bool:
+    """A product search. Room and budget are for add_spec, not for this search."""
+    if asked_for_sample_board(message) or parse_revision_intent(message) or is_brief_confirmation(message):
+        return False
+    if not catalog_category(message):
+        return False
+    facts = parse_job_facts(message)
+    if facts.get("budget_dollars") is not None or facts.get("width_ft") is not None:
+        return False
+    lower = (message or "").lower()
+    if any(token in lower for token in ("plan ", "design ", "outfit", "furnish")):
+        return False
+    return True
+
+
+def _fold_style(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
+
+
+def _style_match(product, style: str) -> bool:
+    wanted = _fold_style(style)
+    if not wanted:
+        return False
+    folded = _fold_style(product.style)
+    return wanted in folded or folded in wanted
+
+
+def _dollars(cents: int) -> str:
+    return f"${cents / 100:.0f}"
+
+
+def _user_named(message: str, product) -> bool:
+    return product.sku in skus_named_in_text(message, [product.sku])
+
+
+def _style_alternative(product, style: str, room_type: str):
+    if _style_match(product, style):
+        return None
+    options = [
+        other
+        for other in PRODUCTS
+        if other.category == product.category
+        and other.sku != product.sku
+        and _style_match(other, style)
+        and (not room_type or room_type in other.room_types)
+    ]
+    if not options:
+        return None
+
+    def rank(other) -> tuple[int, int]:
+        role = 0
+        for token in ("coffee", "floor", "dining", "side", "night"):
+            if token in product.name.lower() and token in other.name.lower():
+                role = -1
+        return (role, other.price_cents)
+
+    options.sort(key=rank)
+    return options[0]
+
+
+def describe_job_facts(facts: dict) -> str:
+    bits: list[str] = []
+    if facts.get("width_ft") and facts.get("length_ft") and facts.get("room_name"):
+        bits.append(
+            f"{facts['width_ft']:g}×{facts['length_ft']:g} {facts['room_name']}"
+        )
+    elif facts.get("room_name"):
+        bits.append(str(facts["room_name"]))
+    if facts.get("budget_dollars") is not None:
+        bits.append(f"${facts['budget_dollars']:g}")
+    if facts.get("style_preferences"):
+        bits.append(str(facts["style_preferences"]))
+    if not bits:
+        return ""
+    return "Updated this job: " + ", ".join(bits) + "."
+
+
+def job_facts_replace_existing(before: dict, facts: dict) -> bool:
+    """True when this turn's room, budget, or style replaces facts already on the job."""
+    if not facts:
+        return False
+    budget = (before.get("budget") or {}).get("total_cents")
+    if facts.get("budget_dollars") is not None and budget is not None:
+        if int(round(float(facts["budget_dollars"]) * 100)) != budget:
+            return True
+    style = (before.get("brief") or {}).get("style_preferences") or ""
+    if facts.get("style_preferences") and style:
+        if _fold_style(facts["style_preferences"]) != _fold_style(style):
+            return True
+    if facts.get("width_ft") is not None:
+        for room in (before.get("rooms") or {}).values():
+            if not isinstance(room, dict) or room.get("width_ft") is None:
+                continue
+            if float(room["width_ft"]) != float(facts["width_ft"]):
+                return True
+    return False
+
+
+def style_budget_decision(
+    skus: list[str],
+    user_message: str,
+    style: str,
+    budget_cents: int | None,
+    room_type: str,
+) -> tuple[list[str], str | None]:
+    """Keep the style match. Say so when a cheaper off-style SKU is what fits the cap."""
+    if not style:
+        return skus, None
+    products = [item for item in (get_product(sku) for sku in skus) if item is not None]
+    if not products:
+        return skus, None
+    replaced: list[tuple] = []
+    chosen: list[str] = []
+    for product in products:
+        if _user_named(user_message, product) or _style_match(product, style):
+            if product.sku not in chosen:
+                chosen.append(product.sku)
+            continue
+        alternative = _style_alternative(product, style, room_type)
+        if alternative is None:
+            if product.sku not in chosen:
+                chosen.append(product.sku)
+            continue
+        if alternative.sku not in chosen:
+            chosen.append(alternative.sku)
+        replaced.append((product, alternative))
+
+    def total_of(sku_list: list[str]) -> int:
+        return sum(item.price_cents for item in (get_product(sku) for sku in sku_list) if item)
+
+    total = total_of(chosen)
+    if replaced:
+        bits = [
+            (
+                f"{on.name} ({on.sku}, {_dollars(on.price_cents)}, {on.style}) matches {style}. "
+                f"{off.name} ({off.sku}, {_dollars(off.price_cents)}, {off.style}) "
+                f"is the off-style option."
+            )
+            for off, on in replaced
+        ]
+        if budget_cents and total > budget_cents:
+            lead = (
+                "Style and budget do not both fit. "
+                f"The style list is {_dollars(total)}, over the {_dollars(budget_cents)} cap."
+            )
+        else:
+            lead = f"I kept the {style} match."
+        return chosen, lead + " " + " ".join(bits) + " I kept the style match on the list."
+
+    if not budget_cents or total <= budget_cents:
+        return chosen, None
+    offers: list[str] = []
+    for product in products:
+        if product.sku not in chosen or not _style_match(product, style):
+            continue
+        options = [
+            other
+            for other in cheaper_in_room(product.sku, room_type)
+            if not _style_match(other, style)
+        ]
+        options.sort(key=lambda item: item.price_cents)
+        fitting = [
+            other
+            for other in options
+            if total - product.price_cents + other.price_cents <= budget_cents
+        ]
+        if not fitting:
+            continue
+        other = fitting[-1]
+        offers.append(
+            f"{product.name} ({product.sku}, {_dollars(product.price_cents)}, {product.style}) matches {style}. "
+            f"{other.name} ({other.sku}, {_dollars(other.price_cents)}, {other.style}) "
+            f"fits the {_dollars(budget_cents)} cap and is off-style."
+        )
+    if not offers:
+        return chosen, None
+    return (
+        chosen,
+        "Style and budget do not both fit. "
+        f"The style list is {_dollars(total)}, over the {_dollars(budget_cents)} cap. "
+        + " ".join(offers)
+        + " I kept the style match on the list.",
+    )
+
+
+def catalog_only_result(message: str, context_key: str) -> dict:
+    category = catalog_category(message) or "piece"
+    matches = search_products(query=message, category=catalog_category(message), limit=4)
+    if not matches:
+        text = f"Inventory has nothing for that {category} search."
+    else:
+        bits = [
+            f"{item.name} ({item.sku}, {_dollars(item.price_cents)})" for item in matches
+        ]
+        text = (
+            "Catalog matches: "
+            + "; ".join(bits)
+            + ". Room and budget are only needed when you want these on a shopping list."
+        )
+    return {
+        "response": text,
+        "metadata": {
+            "routed_to": "search_catalog",
+            "tool_calls_made": ["search_catalog"],
+            "stop_reason": "catalog_only",
+            "context_key": context_key,
+            "source": "mcp_harness",
+        },
+        "project": {},
+    }
 
 
 def parse_job_facts(message: str) -> dict:
@@ -430,15 +666,7 @@ async def persist_revision(
     return project, f"Swapped the {match.category} to {match.name} ({match.sku})."
 
 
-async def persist_talked_about_project(
-    client: Client,
-    context_key: str,
-    user_message: str,
-    messages: list,
-    commentary: str,
-) -> tuple[dict, str | None]:
-    """Write project:// from this turn when the model searched but forgot to persist."""
-    facts = parse_job_facts(user_message)
+async def _apply_job_facts(client: Client, context_key: str, user_message: str, facts: dict) -> None:
     if facts.get("budget_dollars") is not None:
         await flinch_call_tool(
             client,
@@ -478,13 +706,65 @@ async def persist_talked_about_project(
             context_key=context_key,
             stated_intent=user_message,
         )
+
+
+async def persist_talked_about_project(
+    client: Client,
+    context_key: str,
+    user_message: str,
+    messages: list,
+    commentary: str,
+) -> tuple[dict, str | None]:
+    """Write project:// from this turn when the model searched but forgot to persist."""
+    facts_message = user_message
+    confirming = is_brief_confirmation(user_message)
+    if confirming:
+        prior = store.peek_prior(context_key)
+        if prior:
+            facts_message = prior
+    facts = parse_job_facts(facts_message)
+    before = await _read_project(client, context_key)
+    await _apply_job_facts(client, context_key, user_message, facts)
     project = await _read_project(client, context_key)
+    if confirming:
+        return project, describe_job_facts(facts) or "Updated this job."
     if parse_revision_intent(user_message):
         return await persist_revision(
             client, context_key, user_message, messages, project
         )
     found = search_skus_from_messages(messages)
     to_add = skus_named_in_text(commentary, found) or found[:4]
+    style = facts.get("style_preferences") or ""
+    budget_cents = None
+    if facts.get("budget_dollars") is not None:
+        budget_cents = int(round(float(facts["budget_dollars"]) * 100))
+    elif (project.get("budget") or {}).get("total_cents") is not None:
+        budget_cents = project["budget"]["total_cents"]
+    room_type = facts.get("room_type") or _project_room_type(project)
+    tradeoff = None
+    if style:
+        existing = [item.get("sku") for item in (project.get("spec_list") or []) if item.get("sku")]
+        combined: list[str] = []
+        for sku in [*existing, *to_add]:
+            if sku not in combined:
+                combined.append(sku)
+        decided, tradeoff = style_budget_decision(
+            combined, user_message, style, budget_cents, room_type
+        )
+        for sku in existing:
+            if sku not in decided:
+                await flinch_call_tool(
+                    client,
+                    "update_project",
+                    {
+                        "context_key": context_key,
+                        "action": "remove_spec",
+                        "sku": sku,
+                    },
+                    context_key=context_key,
+                    stated_intent=user_message,
+                )
+        to_add = [sku for sku in decided if sku not in existing]
     room = facts.get("room_name") or _project_room_name(project)
     for sku in to_add:
         await flinch_call_tool(
@@ -501,7 +781,12 @@ async def persist_talked_about_project(
         )
     if to_add:
         log.info("harness.persisted_project", context_key=context_key, skus=to_add)
-    return await _read_project(client, context_key), None
+    project = await _read_project(client, context_key)
+    update_note = (
+        describe_job_facts(facts) if job_facts_replace_existing(before, facts) else None
+    )
+    note = " ".join(bit for bit in (update_note, tradeoff) if bit) or None
+    return project, note
 
 
 def _content_text(content: Any) -> str:
@@ -566,11 +851,16 @@ async def _run(message: str, context_key: str) -> dict:
             if isinstance(msg, AIMessage):
                 reply = msg.content if isinstance(msg.content, str) else str(msg.content)
                 break
+        store.remember_message(context_key, message)
         return {
             "response": reply,
             "metadata": {**guard.get("metadata", {}), "routed_to": "rejected"},
             "project": {},
         }
+
+    if is_catalog_only_ask(message):
+        store.remember_message(context_key, message)
+        return catalog_only_result(message, context_key)
 
     context = build_context(context_key)
     default = AIConfigDefault(
@@ -630,13 +920,28 @@ async def _run(message: str, context_key: str) -> dict:
                 break
 
             executed_apply_board = False
+            fact_source = message
+            if is_brief_confirmation(message):
+                fact_source = store.peek_prior(context_key) or message
             for call in calls:
                 name = call["name"]
                 args = inject_job_facts(
-                    name, call.get("args") or {}, context_key, message
+                    name, call.get("args") or {}, context_key, fact_source
                 )
                 log.info("harness.tools_call", tool=name, iteration=iteration)
-                if name == "apply_board" and not asked_for_sample_board(message):
+                if (
+                    name == "update_project"
+                    and is_brief_confirmation(message)
+                    and args.get("action") in {"add_spec", "remove_spec"}
+                ):
+                    payload = {
+                        "error": (
+                            "replace without a piece updates the room, budget, and style. "
+                            "It does not swap a SKU."
+                        )
+                    }
+                    log.info("harness.brief_replace_refused_spec_edit")
+                elif name == "apply_board" and not asked_for_sample_board(message):
                     payload = APPLY_BOARD_REFUSAL
                     log.info("harness.apply_board_refused", reason="not_sample_board_ask")
                 else:
@@ -671,6 +976,7 @@ async def _run(message: str, context_key: str) -> dict:
         )
         if revision_reply:
             commentary = revision_reply
+        store.remember_message(context_key, message)
 
     routed_to = tool_calls_made[0] if tool_calls_made else "direct"
     metadata = {
