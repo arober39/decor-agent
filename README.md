@@ -54,6 +54,7 @@ The model cannot call `approve`. That is a host route on purpose.
 decor-agent/
 ├── mcp_servers/decor_design.py   # MCP environment (tools, resources, prompts)
 ├── recipes/furnish-a-room.yaml   # Goose as a second host (stdio, no developer tools)
+├── AGENTS.md                     # Stop conditions for any host of decor-design
 ├── app/
 │   ├── catalog.py                # Loads PIM rows — if search is empty, inventory is empty
 │   ├── pim/catalog.json          # Identity, price, room, stock
@@ -129,7 +130,7 @@ GOOSE_MODE=auto goose run --recipe recipes/furnish-a-room.yaml --no-session
 
 The recipe enables only the stdio server. It does not load goose’s developer tools, so the model cannot cheat by opening `catalog.json`. Goose talks to MCP directly: it does **not** go through `app/harness.py`, so the host flinch gate does not run. That is the check. A second host, same closet.
 
-Success is real PIM SKUs, `request_approval`, then idle. Goose must not call `approve` — that tool is not on the server.
+Success is real PIM SKUs, `request_approval`, then idle. Goose must not call `approve` — that tool is not on the server. Stop conditions for any host are in [`AGENTS.md`](AGENTS.md).
 
 ## Tests
 
@@ -159,12 +160,11 @@ Unknown `.env` keys are ignored so leftover Temporal-era variables do not crash 
 
 ## What's next (not in this tree)
 
-AAIF build order after MCP + goose as a second host:
+AAIF build order after MCP + goose + `AGENTS.md`:
 
-1. `AGENTS.md` — stop conditions and consent, once the agent exists
-2. A2A — e.g. a retailer agent for stock
-3. agentgateway — only when there is more than one thing to front
-4. LaunchDarkly — gate work that is already real (model-only AI Config is already on the Decora host)
+1. A2A — e.g. a retailer agent for stock
+2. agentgateway — only when there is more than one thing to front
+3. LaunchDarkly — gate work that is already real (model-only AI Config is already on the Decora host)
 
 Temporal (API World durable-workflow demo) lives on [`temporal-api-world`](https://github.com/arober39/decor-agent/tree/temporal-api-world) and `durable-workflows`, not on `main`.
 

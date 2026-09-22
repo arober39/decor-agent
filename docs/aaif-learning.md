@@ -223,3 +223,9 @@ The product is a spec you can Approve, not a chat that invents IKEA.
 **What we added.** [`recipes/furnish-a-room.yaml`](../recipes/furnish-a-room.yaml) — stdio `venv/bin/python mcp_servers/decor_design.py`, no developer builtin. Run from the repo root. `request_approval` then stop. `approve` is still not a tool.
 
 **What would still be a wrapper.** Enabling goose’s developer extension so it can `cat` the PIM. Shipping a recipe that only works inside FastAPI. Moving flinch into `decor_design.py` so every host has to speak LaunchDarkly.
+
+## Slice: AGENTS.md after the second host works
+
+**Why now.** Goose can furnish a room. The stop conditions still lived in a recipe prompt and in Decora’s host system prompt. A stranger should not have to reverse-engineer `app/prompts.py`. AAIF’s next file is [`AGENTS.md`](../AGENTS.md): inventory rule, lanes, `request_approval` then idle, approve is not a tool.
+
+**What this is not.** Not another personality. Not LaunchDarkly. Not A2A. The recipe still names the stdio command. `AGENTS.md` names the job. Goose and the Decora harness can disagree on prose; they cannot disagree on “she cannot checkout.”
