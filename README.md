@@ -24,19 +24,20 @@ Old specialist prompts (`style_advisor`, `room_planner`, `trend_spotter`) are st
 
 ```
 Host (FastAPI + web/)
-  chat UI + project panel
-  harness: observe → tools/list → model → tools/call → stop for approval
+  Studio shopping list + chat (optional)
+  harness: observe → tools/list → model → tools/call → flinch → stop for approval
   MCP client
         │
-        │  JSON-RPC (in-process Client, or stdio for Inspector)
+        │  JSON-RPC (in-process Client, or stdio for Inspector / goose)
         ▼
 Server (mcp_servers/decor_design.py)  — no Claude
-  tools:     search_catalog, update_project, request_approval
+  tools:     search_catalog, update_project, apply_board, request_approval
   resources: project://{context_key}, catalog://sku/{sku}
   prompts:   plan_room (user-invoked)
         │
         ▼
-World: seeded catalog + in-memory project store
+World: PIM catalog (app/pim/catalog.json) + in-memory project store
+       search_catalog tries Qdrant, then keyword fallback on the same rows
 ```
 
 | Primitive | Who controls it | In this repo |
@@ -52,8 +53,10 @@ The model cannot call `approve`. That is a host route on purpose.
 ```
 decor-agent/
 ├── mcp_servers/decor_design.py   # MCP environment (tools, resources, prompts)
+├── recipes/furnish-a-room.yaml   # Goose as a second host (stdio, no developer tools)
 ├── app/
-│   ├── catalog.py                # Seeded SKUs — if it is not here, it does not exist
+│   ├── catalog.py                # Loads PIM rows — if search is empty, inventory is empty
+│   ├── pim/catalog.json          # Identity, price, room, stock
 │   ├── project.py                # Brief, rooms, spec list, budget, approval
 │   ├── store.py                  # In-memory projects keyed by context_key
 │   ├── harness.py                # Host loop: discover tools, call MCP, read project://
@@ -114,6 +117,20 @@ npx @modelcontextprotocol/inspector python mcp_servers/decor_design.py
 
 Then `tools/list`, `resources/read` on `project://demo` or `catalog://sku/ART-SOFA-721`, and `prompts/get` `plan_room`.
 
+## Point goose at the same server
+
+If goose cannot furnish a room from `decor-design`, the MCP is not done. The Decora website is optional. Run from the **repo root** with the project venv so `venv/bin/python` can import `app`.
+
+```bash
+source venv/bin/activate
+goose recipe validate recipes/furnish-a-room.yaml
+GOOSE_MODE=auto goose run --recipe recipes/furnish-a-room.yaml --no-session
+```
+
+The recipe enables only the stdio server. It does not load goose’s developer tools, so the model cannot cheat by opening `catalog.json`. Goose talks to MCP directly: it does **not** go through `app/harness.py`, so the host flinch gate does not run. That is the check. A second host, same closet.
+
+Success is real PIM SKUs, `request_approval`, then idle. Goose must not call `approve` — that tool is not on the server.
+
 ## Tests
 
 No API key needed for the protocol and store tests:
@@ -142,13 +159,12 @@ Unknown `.env` keys are ignored so leftover Temporal-era variables do not crash 
 
 ## What's next (not in this tree)
 
-AAIF build order after MCP + this host:
+AAIF build order after MCP + goose as a second host:
 
-1. Point [goose](https://block.github.io/goose/) at `decor-design` (manual check — if goose cannot furnish a room, the server is not done)
-2. `AGENTS.md` — stop conditions and consent, once the agent exists
-3. A2A — e.g. a retailer agent for stock
-4. agentgateway — only when there is more than one thing to front
-5. LaunchDarkly — gate work that is already real
+1. `AGENTS.md` — stop conditions and consent, once the agent exists
+2. A2A — e.g. a retailer agent for stock
+3. agentgateway — only when there is more than one thing to front
+4. LaunchDarkly — gate work that is already real (model-only AI Config is already on the Decora host)
 
 Temporal (API World durable-workflow demo) lives on [`temporal-api-world`](https://github.com/arober39/decor-agent/tree/temporal-api-world) and `durable-workflows`, not on `main`.
 

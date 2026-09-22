@@ -2,7 +2,7 @@
 
 This file is a running explanation of *why* each slice exists. Read it in order. Chat will repeat the same ideas with more walkthrough when a slice lands.
 
-We are learning the [Agentic AI Foundation](https://aaif.io/) stack by rebuilding this familiar interior-design app. Build order is a dependency chain: **MCP server → (optional) goose as a consumer → Decora harness → AGENTS.md → A2A → agentgateway → LaunchDarkly**.
+We are learning the [Agentic AI Foundation](https://aaif.io/) stack by rebuilding this familiar interior-design app. Build order is a dependency chain: **MCP server → Decora harness → goose as a second host → AGENTS.md → A2A → agentgateway → LaunchDarkly**. Goose is optional as a *product*, not as a *proof*: if a stranger cannot use `decor-design`, the MCP is not done. The harness landed before goose because we needed a host to ship the job; goose is the second consumer, not a rewrite.
 
 ## Slice: start from the Q&A wrapper
 
@@ -213,3 +213,13 @@ The product is a spec you can Approve, not a chat that invents IKEA.
 **LaunchDarkly the agent way.** `decor-board-intake` is a product boolean (on offline). `spec_saved` / `spec_approved` fire from the store. AI Config still picks the model. It still does not write the job.
 
 **Experiment later.** KPI is approved spec lines, not tokens. Until something can deploy this repo, experiment at 10% 50/50 and ramp by hand. See [`docs/experiment-loop.md`](experiment-loop.md).
+
+## Slice: goose as a second host
+
+**Why this slice, not more Decora UI.** Milestone 1 promised: if another agent cannot furnish a room from `decor-design`, we built a website, not an environment. Goose is AAIF’s reference agent. We do not import it. We point it at the same stdio server Inspector uses.
+
+**What the layout actually is now.** The README had drifted. Inventory is PIM rows in [`app/pim/catalog.json`](../app/pim/catalog.json), not a 20-SKU tuple in `catalog.py`. `search_catalog` tries Qdrant ([`app/semantic_search.py`](../app/semantic_search.py)) and falls back to keyword search on those same rows if Qdrant is down. `apply_board` is a fourth MCP tool for the Studio sample board. The Decora harness still wraps `tools/call` with [`app/flinch_gate.py`](../app/flinch_gate.py). Goose does not. Flinch stays host-side so the MCP server stays model-free. The stranger does not inherit our Jev hook. That is the point of the check.
+
+**What we added.** [`recipes/furnish-a-room.yaml`](../recipes/furnish-a-room.yaml) — stdio `venv/bin/python mcp_servers/decor_design.py`, no developer builtin. Run from the repo root. `request_approval` then stop. `approve` is still not a tool.
+
+**What would still be a wrapper.** Enabling goose’s developer extension so it can `cat` the PIM. Shipping a recipe that only works inside FastAPI. Moving flinch into `decor_design.py` so every host has to speak LaunchDarkly.

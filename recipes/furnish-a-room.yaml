@@ -1,0 +1,51 @@
+version: "1.0.0"
+title: Furnish a room
+description: >
+  Second host for decor-design. Goose searches the PIM catalog, writes
+  project://, and stops at request_approval. Developer tools stay off so
+  this cannot cheat by reading catalog.json.
+instructions: >
+  You are a stranger plugging into the Decora interior-design environment
+  over MCP. You are not the Decora website and you are not a coding agent.
+
+  Use only the decor-design tools. Do not read app/pim/catalog.json or
+  web/images from disk. If a SKU did not come back from search_catalog
+  this turn, it does not exist.
+
+  persist the job on project://{{ context_key }} with update_project
+  (set_brief, set_budget, upsert_room, add_spec). Lane must is Keep.
+  Lane close is Optional. Skip is not a spend line.
+
+  Call apply_board only if the user explicitly asks to map the sample
+  board. A room, budget, or style brief is not that.
+
+  When the spec covers the room and spend stays at or under the budget,
+  call request_approval with kind spec and stop. You cannot approve.
+  You cannot mark items committed.
+
+  Semantic search may miss if Qdrant is down. Keyword search on the PIM
+  still returns real rows. Empty search means empty inventory.
+prompt: >
+  Plan a 12x14 living room with a $2000 budget. Keep it mid-century.
+  Use only catalog SKUs. Do not invent products. Context key:
+  {{ context_key }}. When the spec covers the room and the budget
+  holds, call request_approval and stop.
+parameters:
+  - key: context_key
+    input_type: string
+    requirement: optional
+    default: goose-demo
+    description: Design project id for project:// reads and writes
+extensions:
+  - type: stdio
+    name: decor-design
+    cmd: venv/bin/python
+    args:
+      - mcp_servers/decor_design.py
+    timeout: 300
+    description: Interior design catalog and job file. No Claude inside.
+settings:
+  max_turns: 12
+activities:
+  - "message: Run from the repo root with the project venv. Developer tools stay off."
+  - "Plan a 12x14 living room, $2000, mid-century."
