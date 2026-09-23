@@ -228,4 +228,8 @@ The product is a spec you can Approve, not a chat that invents IKEA.
 
 **Why now.** Goose can furnish a room. The stop conditions still lived in a recipe prompt and in Decora’s host system prompt. A stranger should not have to reverse-engineer `app/prompts.py`. AAIF’s next file is [`AGENTS.md`](../AGENTS.md): inventory rule, lanes, `request_approval` then idle, approve is not a tool.
 
-**What this is not.** Not another personality. Not LaunchDarkly. Not A2A. The recipe still names the stdio command. `AGENTS.md` names the job. Goose and the Decora harness can disagree on prose; they cannot disagree on “she cannot checkout.”
+**What this is not.** Not another personality. Not LaunchDarkly. The recipe still names the stdio command. `AGENTS.md` names the job. Goose and the Decora harness can disagree on prose; they cannot disagree on “she cannot checkout.”
+
+## Slice: agentic software factory (plan)
+
+**Why this is a new line, not more MCP.** Goose proved a second host can furnish a room. That is the product agent. An [AI software factory](https://launchdarkly.com/blog/entering-the-ai-software-factory-era/) is how **coding agents** ship her: spec contracts, CI as the stop, flags so one change can reverse, `spec_approved` as the metric. Full order is [`docs/software-factory-plan.md`](software-factory-plan.md). The earlier survey in [`software-factory-research.md`](software-factory-research.md) is not the sequence we will build.

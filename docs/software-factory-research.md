@@ -1,5 +1,7 @@
 # Software factory approaches — notes for Decora
 
+**Superseded as a build order.** What we actually ship is [`software-factory-plan.md`](software-factory-plan.md). This file stays as the survey of Factory.ai / OpenAI / Anthropic / AAIF.
+
 Planning notes, not a video script. Sources are first-party where possible. This is how other people build **plants that produce software**, and what that should include for Decora (the design agent and the repo that ships her). It is not A2A. A2A stays a later video: Decora talking to another business agent.
 
 ## Two meanings of “factory” — pick one per sentence
