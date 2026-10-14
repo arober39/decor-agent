@@ -240,10 +240,15 @@ async def chat(req: ChatRequest) -> JSONResponse:
 @app.get("/api/capabilities")
 async def capabilities(context_key: str = "anonymous") -> dict:
     context = build_context(context_key)
-    return {
+    caps = {
         "board_intake": get_flag(BOARD_INTAKE_FLAG, context, default=True),
         "sample_board": "living-linen",
     }
+    # LaunchDarkly flagged room mood string for user-facing capability
+    FLAG_DEFAULT = False
+    if get_flag("decor-room-mood", context, default=FLAG_DEFAULT):
+        caps["room_mood"] = "calm linen"
+    return caps
 
 
 @app.get("/api/project")
