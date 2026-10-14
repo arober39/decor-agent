@@ -314,6 +314,33 @@ def _spec_change(work):
     return None
 
 
+@app.post("/api/cart/items")
+async def add_cart_item(req: ProjectRequest) -> JSONResponse:
+    err = _spec_change(lambda: store.add_to_cart(req.context_key, req.sku))
+    if err:
+        return err
+    log.info("cart.added", context_key=req.context_key, sku=req.sku)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
+@app.post("/api/cart/remove")
+async def remove_cart_item(req: ProjectRequest) -> JSONResponse:
+    err = _spec_change(lambda: store.remove_from_cart(req.context_key, req.sku))
+    if err:
+        return err
+    log.info("cart.removed", context_key=req.context_key, sku=req.sku)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
+@app.post("/api/cart/commit")
+async def commit_cart(req: ProjectRequest) -> JSONResponse:
+    err = _spec_change(lambda: store.commit_cart(req.context_key))
+    if err:
+        return err
+    log.info("cart.committed", context_key=req.context_key)
+    return JSONResponse(status_code=200, content=store.snapshot(req.context_key))
+
+
 @app.post("/api/project/drop-spec")
 async def drop_spec(req: ProjectRequest) -> JSONResponse:
     err = _spec_change(lambda: store.drop_spec(req.context_key, req.sku))

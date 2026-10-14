@@ -156,6 +156,16 @@
         <h2>Shopping list</h2>
         <p id="project-brief" class="muted">No brief yet. Use a starter chip or tell me the room.</p>
         <p id="list-note" class="list-note hidden"></p>
+        <section class="cart" aria-label="Cart">
+          <div class="spec-top">
+            <h2>Cart</h2>
+            <p id="cart-total" class="muted">Nothing held</p>
+          </div>
+          <p class="muted">Held here. Not on the list and not in the budget until you move it.</p>
+          <ul id="cart-shelf" class="cart-shelf"></ul>
+          <ul id="cart-lines" class="spec-list"></ul>
+          <button id="cart-commit" class="btn btn-dark hidden" type="button">Move cart onto the list</button>
+        </section>
         <div id="list-actions" class="job-actions hidden">
           <button class="btn btn-dark" type="button" data-job="approve">Approve list</button>
           <button class="btn btn-ghost" type="button" data-job="change">Request changes</button>
@@ -176,6 +186,6 @@
       </section>
     </div>
 
-    <script src="/web/studio.js?v=rooms" defer></script>
+    <script src="/web/studio.js?v=cart" defer></script>
   </body>
 </html>

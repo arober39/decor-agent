@@ -33,6 +33,38 @@ def test_studio_and_catalog_routes() -> None:
     assert all(item["image_url"] for item in products)
 
 
+def test_cart_stays_off_the_list_until_moved() -> None:
+    client = TestClient(app)
+    catalog = client.get("/api/catalog", params={"limit": 1})
+    sku = catalog.json()["products"][0]["sku"]
+    price = catalog.json()["products"][0]["price_cents"]
+    room = client.post("/api/rooms", json={"name": "Cart living"})
+    assert room.status_code == 200
+    key = room.json()["context_key"]
+
+    added = client.post("/api/cart/items", json={"context_key": key, "sku": sku})
+    assert added.status_code == 200
+    held = added.json()
+    assert held["spec_list"] == []
+    assert held["budget"]["planned_cents"] == 0
+    assert held["cart"][0]["sku"] == sku
+    assert held["cart"][0]["qty"] == 1
+
+    again = client.post("/api/cart/items", json={"context_key": key, "sku": sku})
+    assert again.json()["cart"][0]["qty"] == 2
+
+    moved = client.post("/api/cart/commit", json={"context_key": key})
+    assert moved.status_code == 200
+    project = moved.json()
+    assert project["cart"] == []
+    assert project["spec_list"][0]["sku"] == sku
+    assert project["spec_list"][0]["qty"] == 2
+    assert project["spec_list"][0]["status"] == "draft"
+    assert project["budget"]["draft_cents"] == price * 2
+    assert project["budget"]["committed_cents"] == 0
+    assert project["pending_approval"] is True
+
+
 def test_from_board_then_approve() -> None:
     client = TestClient(app)
     caps = client.get("/api/capabilities", params={"context_key": "http-board"})
