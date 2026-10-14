@@ -380,6 +380,8 @@ async function loadCapabilities() {
     const caps = await response.json();
     boardBtn.classList.toggle("hidden", !caps.board_intake);
     document.getElementById("start-board")?.classList.toggle("hidden", !caps.board_intake);
+    document.getElementById("cart-section")?.classList.toggle("hidden", !caps.cart_hold);
+    if (caps.cart_hold) loadCartShelf();
   } catch {
     boardBtn.classList.remove("hidden");
   }
@@ -495,7 +497,6 @@ async function sendChat(message) {
 
 syncRoomUrl(contextKey, true);
 loadCapabilities();
-loadCartShelf();
 hydrateProject({ reloadTranscript: true });
 
 form.addEventListener("submit", async (event) => {

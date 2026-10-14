@@ -33,7 +33,17 @@ def test_studio_and_catalog_routes() -> None:
     assert all(item["image_url"] for item in products)
 
 
-def test_cart_stays_off_the_list_until_moved() -> None:
+def test_cart_is_off_without_flag() -> None:
+    client = TestClient(app)
+    assert client.get("/api/capabilities").json()["cart_hold"] is False
+    blocked = client.post("/api/cart/items", json={"context_key": "cart-off", "sku": "x"})
+    assert blocked.status_code == 403
+
+
+def test_cart_stays_off_the_list_until_moved(monkeypatch) -> None:
+    import server
+
+    monkeypatch.setattr(server, "get_flag", lambda key, ctx, default=False: True)
     client = TestClient(app)
     catalog = client.get("/api/catalog", params={"limit": 1})
     sku = catalog.json()["products"][0]["sku"]

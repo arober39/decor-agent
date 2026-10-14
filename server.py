@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.flags import BOARD_INTAKE_FLAG, build_context, get_flag, set_current_user_tier
+from app.flags import BOARD_INTAKE_FLAG, CART_HOLD_FLAG, build_context, get_flag, set_current_user_tier
 from app.catalog import PRODUCTS
 from app.harness import run_agent_async
 from app.logging import configure_logging, get_logger
@@ -242,6 +242,7 @@ async def capabilities(context_key: str = "anonymous") -> dict:
     context = build_context(context_key)
     return {
         "board_intake": get_flag(BOARD_INTAKE_FLAG, context, default=True),
+        "cart_hold": get_flag(CART_HOLD_FLAG, context, default=False),
         "sample_board": "living-linen",
     }
 
@@ -314,8 +315,16 @@ def _spec_change(work):
     return None
 
 
+def _cart_off(context_key: str) -> JSONResponse | None:
+    if get_flag(CART_HOLD_FLAG, build_context(context_key), default=False):
+        return None
+    return JSONResponse(status_code=403, content={"detail": "Cart is off."})
+
+
 @app.post("/api/cart/items")
 async def add_cart_item(req: ProjectRequest) -> JSONResponse:
+    if off := _cart_off(req.context_key):
+        return off
     err = _spec_change(lambda: store.add_to_cart(req.context_key, req.sku))
     if err:
         return err
@@ -325,6 +334,8 @@ async def add_cart_item(req: ProjectRequest) -> JSONResponse:
 
 @app.post("/api/cart/remove")
 async def remove_cart_item(req: ProjectRequest) -> JSONResponse:
+    if off := _cart_off(req.context_key):
+        return off
     err = _spec_change(lambda: store.remove_from_cart(req.context_key, req.sku))
     if err:
         return err
@@ -334,6 +345,8 @@ async def remove_cart_item(req: ProjectRequest) -> JSONResponse:
 
 @app.post("/api/cart/commit")
 async def commit_cart(req: ProjectRequest) -> JSONResponse:
+    if off := _cart_off(req.context_key):
+        return off
     err = _spec_change(lambda: store.commit_cart(req.context_key))
     if err:
         return err
