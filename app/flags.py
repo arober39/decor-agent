@@ -11,6 +11,8 @@ from app.logging import get_logger
 log = get_logger(__name__)
 
 BOARD_INTAKE_FLAG = "decor-board-intake"
+ROOM_MOOD_FLAG = "decor-room-mood"
+FLAG_DEFAULT = False
 FLINCH_POLICY_FLAG = "flinch-policy"
 FLINCH_POLICY_DEFAULT = {
     "mode": "live",
