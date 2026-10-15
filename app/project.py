@@ -43,9 +43,19 @@ class SpecItem(BaseModel):
     category: str
     price_cents: int
     room: str
+    qty: int = 1
     status: SpecStatus = "draft"
     lane: SpecLane = "must"
     why: str = ""
+
+
+class CartItem(BaseModel):
+    """A held piece. It is not on the spec and it does not spend budget."""
+
+    sku: str
+    name: str
+    price_cents: int
+    qty: int = 1
 
 
 class SkippedPin(BaseModel):
@@ -58,6 +68,7 @@ class DesignProject(BaseModel):
     brief: Brief = Field(default_factory=Brief)
     rooms: dict[str, Room] = Field(default_factory=dict)
     spec_list: list[SpecItem] = Field(default_factory=list)
+    cart: list[CartItem] = Field(default_factory=list)
     skipped: list[SkippedPin] = Field(default_factory=list)
     board_pins: list[str] = Field(default_factory=list)
     rejected: list[str] = Field(default_factory=list)
@@ -72,11 +83,15 @@ class DesignProject(BaseModel):
 
     @property
     def committed_cents(self) -> int:
-        return sum(item.price_cents for item in self.spec_list if item.status == "committed")
+        return sum(item.price_cents * item.qty for item in self.spec_list if item.status == "committed")
 
     @property
     def draft_cents(self) -> int:
-        return sum(item.price_cents for item in self.spec_list if item.status == "draft")
+        return sum(item.price_cents * item.qty for item in self.spec_list if item.status == "draft")
+
+    @property
+    def cart_cents(self) -> int:
+        return sum(item.price_cents * item.qty for item in self.cart)
 
     @property
     def remaining_cents(self) -> int | None:
@@ -141,6 +156,14 @@ class DesignProject(BaseModel):
             "brief": self.brief.model_dump(),
             "rooms": {key: room.model_dump() for key, room in self.rooms.items()},
             "spec_list": specs,
+            "cart": [
+                {
+                    **item.model_dump(),
+                    "image_url": catalog_image_url(item.sku),
+                }
+                for item in self.cart
+            ],
+            "cart_cents": self.cart_cents,
             "skipped": [item.model_dump() for item in self.skipped],
             "board_pins": list(self.board_pins),
             "board": [
