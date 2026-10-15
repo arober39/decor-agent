@@ -12,6 +12,7 @@ from app.catalog import cheaper_in_room, get_product
 from app.events import SPEC_APPROVED, SPEC_SAVED, track
 from app.project import (
     ApprovalKind,
+    CartItem,
     DesignProject,
     Room,
     SkippedPin,
@@ -309,6 +310,69 @@ def add_spec(
         1,
     )
     return project
+
+
+def add_to_cart(context_key: str, sku: str) -> DesignProject:
+    """Hold a catalog piece. It stays off the spec and out of the budget."""
+    product = get_product(sku)
+    if product is None:
+        raise ValueError(f"Unknown sku {sku}")
+    project = get_or_create(context_key)
+    for item in project.cart:
+        if item.sku == product.sku:
+            if item.qty >= product.qty_on_hand:
+                raise ValueError(f"Only {product.qty_on_hand} of {product.name} are in stock")
+            item.qty += 1
+            project.refresh_status()
+            return project
+    project.cart.append(
+        CartItem(sku=product.sku, name=product.name, price_cents=product.price_cents, qty=1)
+    )
+    project.refresh_status()
+    return project
+
+
+def remove_from_cart(context_key: str, sku: str) -> DesignProject:
+    project = get_or_create(context_key)
+    before = len(project.cart)
+    project.cart = [item for item in project.cart if item.sku != sku.strip().upper()]
+    if len(project.cart) == before:
+        raise ValueError(f"No cart line for {sku}")
+    project.refresh_status()
+    return project
+
+
+def commit_cart(context_key: str) -> DesignProject:
+    """Move held pieces onto the draft list. Spend starts only after approval."""
+    project = get_or_create(context_key)
+    if not project.cart:
+        raise ValueError("Cart is empty")
+    room = _room_name(context_key)
+    moved: list[str] = []
+    for held in list(project.cart):
+        add_spec(
+            context_key,
+            held.sku,
+            room,
+            lane="close",
+            why="Added from the cart",
+        )
+        current = get_or_create(context_key)
+        for line in current.spec_list:
+            if line.sku == held.sku:
+                line.qty = held.qty
+                line.status = "draft"
+                break
+        moved.append(f"{held.qty} × {held.name}")
+    project = get_or_create(context_key)
+    project.cart.clear()
+    project.refresh_status()
+    request_approval(
+        context_key,
+        "spec",
+        "Cart moved onto the list: " + ", ".join(moved) + ". Approve before it is committed.",
+    )
+    return get_or_create(context_key)
 
 
 def apply_sample_board(

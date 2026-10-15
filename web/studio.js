@@ -283,7 +283,7 @@ function renderProject(project) {
                 <span><span class="lane lane-${escapeHtml(lane)}">${escapeHtml(laneLabel(lane))}</span> <span class="spec-name">${escapeHtml(item.name)}</span></span>
                 <span>${money(item.price_cents)}</span>
               </div>
-              <p class="spec-meta">${escapeHtml(item.sku)} · ${escapeHtml(item.color || "")} · ${escapeHtml(item.status)}</p>
+              <p class="spec-meta">${escapeHtml(item.sku)} · ${escapeHtml(item.color || "")} · ${escapeHtml(item.status)}${item.qty > 1 ? ` · ×${item.qty}` : ""}</p>
               ${why}
               ${acts}
             </div>
@@ -303,6 +303,8 @@ function renderProject(project) {
     .map((note) => `<li>${escapeHtml(note)}</li>`)
     .join("");
 
+  renderCart(project);
+
   const started = specs.length > 0 || boardWasMapped();
   setHidden("start-guide", started);
 
@@ -311,6 +313,52 @@ function renderProject(project) {
   setHidden("list-actions", !showApprove);
   renderBoard(project);
   loadRooms();
+}
+
+function renderCart(project) {
+  const lines = project.cart || [];
+  const total = document.getElementById("cart-total");
+  const commit = document.getElementById("cart-commit");
+  total.textContent = lines.length
+    ? `${money(project.cart_cents || 0)} held · not in the budget`
+    : "Nothing held";
+  commit.classList.toggle("hidden", lines.length === 0);
+  document.getElementById("cart-lines").innerHTML = lines
+    .map(
+      (item) => `<li class="spec-row">
+        <div class="spec-body">
+          <div class="spec-top">
+            <span class="spec-name">${escapeHtml(item.name)} ×${item.qty}</span>
+            <span>${money(item.price_cents * item.qty)}</span>
+          </div>
+          <div class="spec-acts">
+            <button type="button" class="btn btn-ghost spec-act" data-cart-remove="${escapeHtml(item.sku)}">Remove</button>
+          </div>
+        </div>
+      </li>`,
+    )
+    .join("");
+}
+
+async function loadCartShelf() {
+  const shelf = document.getElementById("cart-shelf");
+  if (!shelf || shelf.childElementCount) return;
+  try {
+    const response = await fetch("/api/catalog?limit=4");
+    if (!response.ok) return;
+    const products = (await response.json()).products || [];
+    shelf.innerHTML = products
+      .map(
+        (product) => `<li>
+          <button type="button" class="btn btn-ghost spec-act" data-add-sku="${escapeHtml(product.sku)}">
+            Add ${escapeHtml(product.name)} · ${money(product.price_cents)}
+          </button>
+        </li>`,
+      )
+      .join("");
+  } catch {
+    shelf.innerHTML = "";
+  }
 }
 
 async function mutateProject(path, extra) {
@@ -332,6 +380,8 @@ async function loadCapabilities() {
     const caps = await response.json();
     boardBtn.classList.toggle("hidden", !caps.board_intake);
     document.getElementById("start-board")?.classList.toggle("hidden", !caps.board_intake);
+    document.getElementById("cart-section")?.classList.toggle("hidden", !caps.cart_hold);
+    if (caps.cart_hold) loadCartShelf();
   } catch {
     boardBtn.classList.remove("hidden");
   }
@@ -582,7 +632,35 @@ async function sendChangeRequest(reason) {
   }
 }
 
+document.getElementById("cart-commit").addEventListener("click", async () => {
+  try {
+    const project = await mutateProject("/api/cart/commit");
+    appendMessage("bot", project.pending_approval_summary || "Cart moved onto the list.");
+  } catch (error) {
+    appendMessage("bot", `Could not move the cart: ${error.message}`);
+  }
+});
+
 document.addEventListener("click", async (event) => {
+  const add = event.target.closest("[data-add-sku]");
+  if (add) {
+    try {
+      await mutateProject("/api/cart/items", { sku: add.dataset.addSku });
+      appendMessage("bot", "Held in the cart. It is not on the list until you move it.");
+    } catch (error) {
+      appendMessage("bot", `Could not add that piece: ${error.message}`);
+    }
+    return;
+  }
+  const remove = event.target.closest("[data-cart-remove]");
+  if (remove) {
+    try {
+      await mutateProject("/api/cart/remove", { sku: remove.dataset.cartRemove });
+    } catch (error) {
+      appendMessage("bot", `Could not remove that piece: ${error.message}`);
+    }
+    return;
+  }
   const drop = event.target.closest("[data-drop-sku]");
   if (drop) {
     try {
