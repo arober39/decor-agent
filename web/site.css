@@ -761,6 +761,26 @@ input {
   color: var(--skip);
 }
 
+.cart {
+  margin: 0 0 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line, #e4e0d8);
+}
+
+.cart-shelf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+}
+
+.cart h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .spec-list,
 .plain {
   list-style: none;
