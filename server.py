@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.flags import BOARD_INTAKE_FLAG, CART_HOLD_FLAG, build_context, get_flag, set_current_user_tier
+from app.events import REQUEST_ERROR, track
 from app.catalog import PRODUCTS
 from app.harness import run_agent_async
 from app.logging import configure_logging, get_logger
@@ -116,10 +117,33 @@ app.mount("/web", StaticFiles(directory=WEB_DIR), name="web")
 async def timing_middleware(request: Request, call_next):
     start = time.perf_counter()
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    is_api = request.url.path.startswith("/api/")
+    context_key = request.query_params.get("context_key")
+    # Cache only small JSON bodies; call_next can replay the cached body.
+    # Never read uploads or unbounded streams just for telemetry.
+    if (
+        is_api
+        and not context_key
+        and request.headers.get("content-type", "").split(";")[0] == "application/json"
+    ):
+        try:
+            size = int(request.headers.get("content-length", "0"))
+            if 0 < size <= 64 * 1024:
+                body = await request.json()
+                if isinstance(body, dict):
+                    context_key = body.get("context_key")
+        except (ValueError, UnicodeDecodeError):
+            pass
+    if not isinstance(context_key, str):
+        context_key = None
     try:
         response = await call_next(request)
         status = response.status_code
-    except Exception:
+    except Exception as exc:
+        if is_api and context_key and not getattr(request.state, "request_error_tracked", False):
+            track(REQUEST_ERROR, context_key, {
+                "route": request.url.path, "status": 500, "error": type(exc).__name__,
+            })
         duration_ms = (time.perf_counter() - start) * 1000
         log.exception(
             "http.unhandled_exception",
@@ -129,6 +153,17 @@ async def timing_middleware(request: Request, call_next):
             duration_ms=round(duration_ms, 2),
         )
         raise
+
+    if (
+        is_api
+        and 500 <= status < 600
+        and context_key
+        and not getattr(request.state, "request_error_tracked", False)
+    ):
+        # A returned error response has no exception instance to inspect.
+        track(REQUEST_ERROR, context_key, {
+            "route": request.url.path, "status": status, "error": "HTTPException",
+        })
 
     duration_ms = (time.perf_counter() - start) * 1000
     log.info(
@@ -165,7 +200,7 @@ async def catalog(limit: int = 8) -> dict:
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest) -> JSONResponse:
+async def chat(req: ChatRequest, request: Request) -> JSONResponse:
     message_id = str(uuid.uuid4())
     context_key = req.context_key or f"anon-{uuid.uuid4()}"
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -200,6 +235,10 @@ async def chat(req: ChatRequest) -> JSONResponse:
     try:
         result = await run_agent_async(req.message, context_key=context_key)
     except Exception as exc:
+        track(REQUEST_ERROR, context_key, {
+            "route": request.url.path, "status": 500, "error": type(exc).__name__,
+        })
+        request.state.request_error_tracked = True
         log.error(
             "chat.error",
             message_id=message_id,

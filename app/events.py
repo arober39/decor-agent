@@ -14,6 +14,7 @@ log = get_logger(__name__)
 
 SPEC_SAVED = "spec_saved"
 SPEC_APPROVED = "spec_approved"
+REQUEST_ERROR = "decora_request_error"
 
 
 def track(
@@ -22,11 +23,11 @@ def track(
     data: dict[str, Any] | None = None,
     metric_value: float | None = None,
 ) -> None:
-    client = get_client()
-    if client is None:
-        return
     try:
+        client = get_client()
+        if client is None:
+            return
         context = build_context(context_key)
         client.track(event_key, context, data or {}, metric_value)
     except Exception as exc:
-        log.warning("ld.track_failed", event=event_key, error=str(exc))
+        log.warning("ld.track_failed", event_key=event_key, error=str(exc))
