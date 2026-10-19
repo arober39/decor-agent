@@ -38,7 +38,9 @@ def test_approve_commits_drafts() -> None:
 
 def test_add_spec_keeps_lane() -> None:
     store.upsert_room("p1", name="living room", room_type="living")
-    store.add_spec("p1", "RUG-8X10-JUT", "living room", lane="close", why="jute, not rust")
+    store.add_spec(
+        "p1", "RUG-8X10-JUT", "living room", lane="close", why="jute, not rust"
+    )
     item = store.get_or_create("p1").spec_list[0]
     assert item.lane == "close"
     assert item.why == "jute, not rust"
