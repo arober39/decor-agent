@@ -131,3 +131,111 @@ if __name__ == "__main__":
             setup_function()
             fn()
             print(f"PASS {name}")
+
+
+def test_home_registry():
+    import uuid
+    import tempfile
+    from pathlib import Path
+    from app import store
+
+    # Save/restore helpers for switching between memory/persistent and flag on/off
+    def flag_on():
+        orig = getattr(store, "_should_use_home_registry")
+        store._should_use_home_registry = lambda: True
+        return orig
+
+    def flag_restore(orig):
+        store._should_use_home_registry = orig
+
+    # In-memory registry, create/list/rename
+    orig_flag = flag_on()
+    store.disable_home_registry_persist()
+    store.reset_home_registry()
+    try:
+        # create accepts display names with whitespace trim, unique IDs generated
+        a1 = store.create_home("Livinghaus")
+        a2 = store.create_home("LegacyHome")
+        a3 = store.create_home("Livinghaus")  # allow duplicate name
+        # names are as given, trimmed; IDs differ
+        assert a1["display_name"] == "Livinghaus"
+        assert a3["display_name"] == "Livinghaus"
+        assert a1["home_id"] != a3["home_id"]
+        homes = store.list_homes()
+        assert isinstance(homes, list)
+        ids = {h["home_id"] for h in homes}
+        assert len(ids) == 3
+        # test display name duplicates and sort order (alpha, ties allowed)
+        names = [h["display_name"] for h in homes]
+        assert sorted(names, key=lambda s: s.lower()) == names
+        # whitespace-only names are rejected
+        try:
+            store.create_home("   ")
+            raise AssertionError("expected whitespace validation error")
+        except ValueError:
+            pass
+        # unknown ID for rename errors
+        fake_id = str(uuid.uuid4())
+        try:
+            store.rename_home(fake_id, "Whatever")
+            raise AssertionError("expected error on unknown home_id")
+        except store.HomeRegistryError:
+            pass
+        # rename updates display_name, leaves ID, others untouched
+        renamed = store.rename_home(a2["home_id"], "East Side")
+        assert renamed["display_name"] == "East Side"
+        # old registry in memory mode is unaffected by rename
+        assert a1["display_name"] == "Livinghaus"
+        # confirm registry survives in-memory reset as empty (no persistence)
+        store.reset_home_registry()
+        assert store.list_homes() == []
+    finally:
+        flag_restore(orig_flag)
+
+    # Persistent roundtrip: create and verify survives reload
+    with tempfile.TemporaryDirectory() as tmp:
+        persist_path = Path(tmp) / "projects.json"
+        flag_on()
+        store.reset_home_registry()
+        store.enable_home_registry_persist(persist_path)
+        try:
+            home = store.create_home("MyPersisted")
+            hid = home["home_id"]
+            assert isinstance(hid, str) and len(hid) > 20
+            stored = store.list_homes()
+            assert len(stored) == 1
+            # reload...
+            store.reset_home_registry()
+            store.enable_home_registry_persist(persist_path)
+            after = store.list_homes()
+            assert len(after) == 1
+            assert after[0]["home_id"] == hid
+            assert after[0]["display_name"] == "MyPersisted"
+            # no legacy data touched
+            with open(persist_path) as f:
+                data = f.read()
+                assert "projects" not in data or isinstance(
+                    json.loads(data).get("projects", {}), dict
+                )
+        finally:
+            store.disable_home_registry_persist()
+            store.reset_home_registry()
+
+    # Registry off: all methods raise HomeRegistryError
+    store.disable_home_registry_persist()
+    store.reset_home_registry()
+    store._should_use_home_registry = lambda: False
+    for func, args in [
+        (store.create_home, ("Test",)),
+        (store.list_homes, ()),
+        (store.rename_home, (str(uuid.uuid4()), "X")),
+    ]:
+        try:
+            func(*args)
+            raise AssertionError(f"expected HomeRegistryError for {func.__name__}")
+        except store.HomeRegistryError:
+            pass
+    del store._should_use_home_registry
+
+
+# end test_home_registry
