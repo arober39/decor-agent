@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 ApprovalKind = Literal["concept", "budget", "spec"]
 SpecStatus = Literal["draft", "committed"]
@@ -27,6 +27,12 @@ class Room(BaseModel):
     length_ft: float | None = None
     existing_pieces: list[str] = Field(default_factory=list)
     style_notes: str | None = None
+    # New field for migration: home_id is None for legacy, set for new organization
+    home_id: str | None = None
+
+    def get_home_id(self, context_key: str) -> str:
+        """Get the home ID for this room (returns context_key if not explicitly set)."""
+        return self.home_id or context_key
 
 
 class Brief(BaseModel):
@@ -66,7 +72,10 @@ class SkippedPin(BaseModel):
 class DesignProject(BaseModel):
     context_key: str
     brief: Brief = Field(default_factory=Brief)
-    rooms: dict[str, Room] = Field(default_factory=dict)
+    # Updated: allow `rooms` to model home-aware structure when migration is on
+    # - pre-migration: rooms is {room_key: Room} (room_key = name.lower())
+    # - post-migration: rooms is {(home_id, room_key): Room} (room_key = name.lower(), home_id stable)
+    rooms: dict | None = Field(default_factory=dict)
     spec_list: list[SpecItem] = Field(default_factory=list)
     cart: list[CartItem] = Field(default_factory=list)
     skipped: list[SkippedPin] = Field(default_factory=list)
@@ -81,13 +90,86 @@ class DesignProject(BaseModel):
     )
     status: ProjectStatus = "intake"
 
+    @field_validator("rooms", mode="before")
+    @classmethod
+    def _coerce_rooms(cls, value):
+        """Rebuild Room models after a JSON reload (keys may be legacy or home-aware)."""
+        if not value:
+            return {}
+        return {
+            key: Room.model_validate(room) if isinstance(room, dict) else room
+            for key, room in value.items()
+        }
+
+    def get_rooms_by_home(self, context_key: str) -> dict[str, dict[str, Room]]:
+        """
+        Returns a mapping: {home_id: {room_key: Room, ...}}
+        - If migration has not occurred, all rooms are in context_key.
+        - If migration HAS occurred, rooms is {(home_id, room_key): Room}
+        """
+        # Dynamically import flag so we don't break model import
+        try:
+            from app.flags import (
+                get_flag,
+                build_context,
+                DECORA_ROOM_HOME_MIGRATION_FLAG,
+                DECORA_ROOM_HOME_MIGRATION_FLAG_DEFAULT,
+            )
+        except ImportError:
+            # fallback for static analysis
+            def get_flag(*a, **kw):
+                return False
+
+            def build_context(context_key):
+                return {"key": context_key}
+
+            DECORA_ROOM_HOME_MIGRATION_FLAG = "decora-room-home-migration"
+            DECORA_ROOM_HOME_MIGRATION_FLAG_DEFAULT = False
+        migration_on = get_flag(
+            DECORA_ROOM_HOME_MIGRATION_FLAG,
+            build_context(context_key),
+            default=DECORA_ROOM_HOME_MIGRATION_FLAG_DEFAULT,
+        )
+        if not migration_on:
+            # Legacy: one home (context_key), arbitrary mapping: {room_key: Room}
+            return {context_key: dict(self.rooms)}
+        # Migration: keys are (home_id, room_key)
+        by_home = {}
+        for key, room in self.rooms.items():
+            if isinstance(key, tuple) and len(key) == 2:
+                home_id, room_key = key
+            else:
+                # This should not occur if migration code consistent, fallback to context_key
+                home_id, room_key = context_key, key
+            by_home.setdefault(home_id, {})[room_key] = room
+        return by_home
+
+    def rooms_for_home(self, home_id: str, context_key: str) -> dict[str, Room]:
+        by_home = self.get_rooms_by_home(context_key)
+        return by_home.get(home_id, {})
+
+    def all_rooms(self, context_key: str) -> list[Room]:
+        """Return all Room objects in the project (for migration or summary ops)."""
+        result = []
+        for home_rooms in self.get_rooms_by_home(context_key).values():
+            result.extend(home_rooms.values())
+        return result
+
     @property
     def committed_cents(self) -> int:
-        return sum(item.price_cents * item.qty for item in self.spec_list if item.status == "committed")
+        return sum(
+            item.price_cents * item.qty
+            for item in self.spec_list
+            if item.status == "committed"
+        )
 
     @property
     def draft_cents(self) -> int:
-        return sum(item.price_cents * item.qty for item in self.spec_list if item.status == "draft")
+        return sum(
+            item.price_cents * item.qty
+            for item in self.spec_list
+            if item.status == "draft"
+        )
 
     @property
     def cart_cents(self) -> int:
@@ -117,7 +199,12 @@ class DesignProject(BaseModel):
             self.status = "awaiting_approval"
         elif self.approvals.get("spec"):
             self.status = "complete"
-        elif self.rooms or self.spec_list or self.brief.lifestyle or self.budget_total_cents:
+        elif (
+            self.rooms
+            or self.spec_list
+            or self.brief.lifestyle
+            or self.budget_total_cents
+        ):
             self.status = "planning"
         else:
             self.status = "intake"

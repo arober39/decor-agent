@@ -29,6 +29,10 @@ FLINCH_JEV_DEFAULT = {
     "questions": {},
 }
 
+# Migration flag for associating rooms with homes
+DECORA_ROOM_HOME_MIGRATION_FLAG = "decora-room-home-migration"
+DECORA_ROOM_HOME_MIGRATION_FLAG_DEFAULT = False
+
 _ld_client = None
 _ai_client = None
 
