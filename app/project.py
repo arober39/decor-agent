@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 ApprovalKind = Literal["concept", "budget", "spec"]
 SpecStatus = Literal["draft", "committed"]
@@ -89,6 +89,17 @@ class DesignProject(BaseModel):
         default_factory=lambda: {"concept": False, "budget": False, "spec": False}
     )
     status: ProjectStatus = "intake"
+
+    @field_validator("rooms", mode="before")
+    @classmethod
+    def _coerce_rooms(cls, value):
+        """Rebuild Room models after a JSON reload (keys may be legacy or home-aware)."""
+        if not value:
+            return {}
+        return {
+            key: Room.model_validate(room) if isinstance(room, dict) else room
+            for key, room in value.items()
+        }
 
     def get_rooms_by_home(self, context_key: str) -> dict[str, dict[str, Room]]:
         """
