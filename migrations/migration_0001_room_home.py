@@ -28,41 +28,57 @@ if __name__ == "__main__":
     raw = json.loads(fpath.read_text())
     changed = False
     for context_key, pdata in (raw.get(PROJECTS_KEY) or {}).items():
-        # Defensive: if already migrated (all room keys are tuples), skip
         rooms = pdata.get("rooms")
         if not rooms:
             continue
-        if all(isinstance(k, list) and len(k) == 2 for k in rooms.keys()):
-            # Already migrated (tuple keys serializing as JSON lists)
-            continue
-        # Do migration: map legacy {string: RoomDict} => {(home_id, room_key): RoomDict}
+        # Already-migrated check: if all keys are JSON lists of length 2, treat as migrated
+        all_migrated = True
+        for k in rooms.keys():
+            if isinstance(k, str) and k.startswith("["):
+                try:
+                    dec = json.loads(k)
+                    if not (isinstance(dec, list) and len(dec) == 2):
+                        all_migrated = False
+                        break
+                except Exception:
+                    all_migrated = False
+                    break
+            else:
+                all_migrated = False
+                break
+        if all_migrated:
+            continue  # No change needed
+        # Migrate legacy dict
         migrated = {}
         for room_key, room_dict in rooms.items():
-            if isinstance(room_key, list):
-                # Already tuple/list, skip
+            orig_key = room_key
+            # Unify path: if room_key is JSONified tuple
+            if isinstance(room_key, str) and room_key.startswith("["):
+                try:
+                    k_dec = json.loads(room_key)
+                    if isinstance(k_dec, list) and len(k_dec) == 2:
+                        migrated[tuple(k_dec)] = room_dict
+                        continue
+                except Exception:
+                    pass
+            if isinstance(room_key, list) and len(room_key) == 2:
                 migrated[tuple(room_key)] = room_dict
                 continue
-            # Set home_id if missing
+            # legacy string key
             new_home_id = room_dict.get("home_id") or context_key
-            new_room_key = (new_home_id, room_key)
-            # Patch room_dict itself
+            new_key = (new_home_id, room_key)
             if not room_dict.get("home_id"):
                 room_dict = dict(room_dict)
                 room_dict["home_id"] = new_home_id
-            migrated[new_room_key] = room_dict
-        # Convert migrated dict: JSON keys must be strings. We'll use json.dumps of the tuple for the key.
+            migrated[new_key] = room_dict
         migrated_json = {}
         for k, v in migrated.items():
-            if isinstance(k, tuple):
-                # Use list in JSON for tuple key
-                k_json = json.dumps(list(k))
-            elif isinstance(k, list):
-                k_json = json.dumps(k)
-            else:
-                k_json = k
+            k_json = json.dumps(list(k))
             migrated_json[k_json] = v
-        pdata["rooms"] = migrated_json
-        changed = True
+        # Only set pdata['rooms'] if it's different (prevents writing/backups for no-ops)
+        if rooms != migrated_json:
+            pdata["rooms"] = migrated_json
+            changed = True
     if changed:
         backup = fpath.with_suffix(fpath.suffix + ".bak")
         fpath.replace(backup)
