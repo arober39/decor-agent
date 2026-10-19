@@ -29,6 +29,10 @@ FLINCH_JEV_DEFAULT = {
     "questions": {},
 }
 
+# Migration flag for associating rooms with homes
+DECORA_ROOM_HOME_MIGRATION_FLAG = "decora-room-home-migration"
+DECORA_ROOM_HOME_MIGRATION_FLAG_DEFAULT = False
+
 _ld_client = None
 _ai_client = None
 
@@ -60,6 +64,7 @@ def current_user_tier() -> str | None:
 @dataclass(frozen=True)
 class AIConfigDefault:
     """Fallback values used when LD is offline or the config is missing."""
+
     model: str
     system_prompt: str
     max_tokens: int = 1024
@@ -69,6 +74,7 @@ class AIConfigDefault:
 @dataclass
 class ResolvedAIConfig:
     """What tools and nodes read. Wraps the LD tracker so callers are vendor-neutral."""
+
     model: str
     system_prompt: str
     max_tokens: int
@@ -192,9 +198,7 @@ def init_client() -> None:
             ]
             if skipped not in existing:
                 existing.append(skipped)
-            os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] = ",".join(
-                existing
-            )
+            os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] = ",".join(existing)
             _keep_otel_auto_instrumentation_alive()
             plugins.append(
                 ObservabilityPlugin(
@@ -240,6 +244,7 @@ def build_context(context_key: str, **attrs):
     if _ai_client is None:
         return {"key": context_key, **attrs}
     from ldclient import Context
+
     builder = Context.builder(context_key).kind("user")
     if "user-tier" not in attrs:
         explicit = current_user_tier()
@@ -288,7 +293,8 @@ def _merge_flinch_policy(policy: dict) -> dict:
         destructive["shared"] = "confirm"
     return {
         "mode": policy.get("mode") or FLINCH_POLICY_DEFAULT["mode"],
-        "on_ld_error": policy.get("on_ld_error") or FLINCH_POLICY_DEFAULT["on_ld_error"],
+        "on_ld_error": policy.get("on_ld_error")
+        or FLINCH_POLICY_DEFAULT["on_ld_error"],
         "destructive": destructive,
     }
 
@@ -345,6 +351,7 @@ def get_completion_config(
         )
     try:
         from ldai.client import AICompletionConfigDefault, ModelConfig, LDMessage
+
         ld_default = AICompletionConfigDefault(
             enabled=True,
             model=ModelConfig(
@@ -380,7 +387,9 @@ def get_completion_config(
             if temperature is None:
                 temperature = default.temperature
 
-        variation = getattr(cfg, "variation_key", None) or getattr(cfg, "variation", None)
+        variation = getattr(cfg, "variation_key", None) or getattr(
+            cfg, "variation", None
+        )
 
         log.info(
             "ai_config.fetched",
