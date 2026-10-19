@@ -191,6 +191,8 @@ def rename_room(context_key: str, name: str) -> DesignProject:
     if not cleaned:
         raise ValueError("Room name is required")
     project = get_or_create(context_key)
+    migration_on = _rooms_migration_flag(context_key)
+    # Room key logic
     if len(project.rooms) != 1:
         return upsert_room(
             context_key,
@@ -201,7 +203,15 @@ def rename_room(context_key: str, name: str) -> DesignProject:
     project.rooms.clear()
     room.name = cleaned
     room.room_type = _guess_room_type(cleaned)
-    project.rooms[project.room_key(cleaned)] = room
+    # Determine new key depending on migration
+    if migration_on and isinstance(_old_key, tuple) and len(_old_key) == 2:
+        assigned_home_id = room.home_id or context_key
+        new_key = (assigned_home_id, project.room_key(cleaned))
+        room.home_id = assigned_home_id
+    else:
+        new_key = project.room_key(cleaned)
+    project.rooms[new_key] = room
+    # Update spec items to refer to the new room name
     for item in project.spec_list:
         item.room = cleaned
     project.refresh_status()
@@ -212,6 +222,31 @@ def snapshot(context_key: str) -> dict:
     return get_or_create(context_key).as_public_dict()
 
 
+def _rooms_migration_flag(context_key: str) -> bool:
+    try:
+        from app.flags import (
+            get_flag,
+            build_context,
+            DECORA_ROOM_HOME_MIGRATION_FLAG,
+            DECORA_ROOM_HOME_MIGRATION_FLAG_DEFAULT,
+        )
+    except ImportError:
+
+        def get_flag(*a, **kw):
+            return False
+
+        def build_context(context_key):
+            return {"key": context_key}
+
+        DECORA_ROOM_HOME_MIGRATION_FLAG = "decora-room-home-migration"
+        DECORA_ROOM_HOME_MIGRATION_FLAG_DEFAULT = False
+    return get_flag(
+        DECORA_ROOM_HOME_MIGRATION_FLAG,
+        build_context(context_key),
+        default=DECORA_ROOM_HOME_MIGRATION_FLAG_DEFAULT,
+    )
+
+
 def upsert_room(
     context_key: str,
     name: str,
@@ -220,17 +255,57 @@ def upsert_room(
     length_ft: float | None = None,
     existing_pieces: list[str] | None = None,
     style_notes: str | None = None,
+    home_id: str | None = None,
 ) -> DesignProject:
     project = get_or_create(context_key)
-    key = project.room_key(name)
-    existing = project.rooms.get(key)
+    migration_on = _rooms_migration_flag(context_key)
+    # Determine home_id
+    assigned_home_id = home_id or context_key
+    key = (
+        (assigned_home_id, project.room_key(name))
+        if migration_on
+        else project.room_key(name)
+    )
+    # Find an existing room (legacy or migrated) by scanning possible keys
+    existing = None
+    if migration_on:
+        if key in project.rooms:
+            existing = project.rooms[key]
+        # Attempt legacy lookup as fallback if not present and only one legacy
+        elif project.room_key(name) in project.rooms:
+            existing = project.rooms[project.room_key(name)]
+            # Remove from old spot
+            del project.rooms[project.room_key(name)]
+    else:
+        if key in project.rooms:
+            existing = project.rooms[key]
+        # If a migrated dict was accidently present (shouldn't be pre-migration, but safe)
+        else:
+            for k in list(project.rooms.keys()):
+                if (
+                    isinstance(k, tuple)
+                    and len(k) == 2
+                    and k[1] == project.room_key(name)
+                ):
+                    existing = project.rooms[k]
+                    del project.rooms[k]
+                    break
     project.rooms[key] = Room(
         name=name.strip(),
         room_type=room_type or (existing.room_type if existing else "living"),
-        width_ft=width_ft if width_ft is not None else (existing.width_ft if existing else None),
-        length_ft=length_ft if length_ft is not None else (existing.length_ft if existing else None),
-        existing_pieces=existing_pieces if existing_pieces is not None else (existing.existing_pieces if existing else []),
-        style_notes=style_notes if style_notes is not None else (existing.style_notes if existing else None),
+        width_ft=width_ft
+        if width_ft is not None
+        else (existing.width_ft if existing else None),
+        length_ft=length_ft
+        if length_ft is not None
+        else (existing.length_ft if existing else None),
+        existing_pieces=existing_pieces
+        if existing_pieces is not None
+        else (existing.existing_pieces if existing else []),
+        style_notes=style_notes
+        if style_notes is not None
+        else (existing.style_notes if existing else None),
+        home_id=assigned_home_id if migration_on else None,
     )
     project.refresh_status()
     return project
@@ -281,7 +356,9 @@ def add_spec(
         if len(project.rooms) == 1:
             target = next(iter(project.rooms.values())).name
         else:
-            raise ValueError("room_name is required when the project has no single room")
+            raise ValueError(
+                "room_name is required when the project has no single room"
+            )
     item = SpecItem(
         sku=product.sku,
         name=product.name,
@@ -321,12 +398,16 @@ def add_to_cart(context_key: str, sku: str) -> DesignProject:
     for item in project.cart:
         if item.sku == product.sku:
             if item.qty >= product.qty_on_hand:
-                raise ValueError(f"Only {product.qty_on_hand} of {product.name} are in stock")
+                raise ValueError(
+                    f"Only {product.qty_on_hand} of {product.name} are in stock"
+                )
             item.qty += 1
             project.refresh_status()
             return project
     project.cart.append(
-        CartItem(sku=product.sku, name=product.name, price_cents=product.price_cents, qty=1)
+        CartItem(
+            sku=product.sku, name=product.name, price_cents=product.price_cents, qty=1
+        )
     )
     project.refresh_status()
     return project
@@ -370,7 +451,9 @@ def commit_cart(context_key: str) -> DesignProject:
     request_approval(
         context_key,
         "spec",
-        "Cart moved onto the list: " + ", ".join(moved) + ". Approve before it is committed.",
+        "Cart moved onto the list: "
+        + ", ".join(moved)
+        + ". Approve before it is committed.",
     )
     return get_or_create(context_key)
 
@@ -535,7 +618,9 @@ def remove_spec(context_key: str, sku: str) -> DesignProject:
     return project
 
 
-def request_approval(context_key: str, kind: ApprovalKind, summary: str) -> DesignProject:
+def request_approval(
+    context_key: str, kind: ApprovalKind, summary: str
+) -> DesignProject:
     project = get_or_create(context_key)
     project.pending_approval = True
     project.pending_approval_kind = kind
