@@ -8,6 +8,139 @@ import uuid
 from pathlib import Path
 
 from app.board import resolve_sample_board
+
+# HomeProject registry implementation (feature-flagged)
+from app import flags
+
+HOME_REGISTRY_FLAG = "decora-home-project-registry"
+
+
+class HomeRegistryError(Exception):
+    pass
+
+
+class HomeProject:
+    def __init__(self, home_id: str, display_name: str):
+        self.home_id = home_id  # stable, str(UUID)
+        self.display_name = display_name  # not blank/whitespace
+
+    def to_dict(self):
+        return {"home_id": self.home_id, "display_name": self.display_name}
+
+
+# In-memory/persistent registry containers; not coupled to rooms
+_home_registry: dict[str, HomeProject] = {}
+_home_registry_persist_path: Path | None = None
+
+
+def _should_use_home_registry() -> bool:
+    ctx = flags.build_context("home-registry")
+    return flags.get_flag(HOME_REGISTRY_FLAG, ctx, default=False)
+
+
+def _save_home_registry() -> None:
+    if _home_registry_persist_path is None:
+        return
+    _home_registry_persist_path.parent.mkdir(parents=True, exist_ok=True)
+    data = [hp.to_dict() for hp in _home_registry.values()]
+    # Home registry is independent; append to legacy data file if present
+    path = _home_registry_persist_path
+    payload = {}
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text())
+            payload = existing if isinstance(existing, dict) else {}
+        except Exception:
+            pass
+    payload["homes"] = data
+    path.write_text(json.dumps(payload, indent=2))
+
+
+def _load_home_registry() -> None:
+    if _home_registry_persist_path is None or not _home_registry_persist_path.exists():
+        return
+    try:
+        obj = json.loads(_home_registry_persist_path.read_text())
+    except Exception:
+        return
+    rows = obj.get("homes", [])
+    _home_registry.clear()
+    for row in rows:
+        if isinstance(row, dict) and "home_id" in row and "display_name" in row:
+            _home_registry[row["home_id"]] = HomeProject(
+                row["home_id"], row["display_name"]
+            )
+
+
+def enable_home_registry_persist(path: str | Path | None = None) -> None:
+    global _home_registry_persist_path
+    if path is None:
+        _home_registry_persist_path = (
+            Path(__file__).resolve().parents[1] / "data" / "projects.json"
+        )
+    else:
+        _home_registry_persist_path = Path(path)
+    _load_home_registry()
+
+
+def disable_home_registry_persist() -> None:
+    global _home_registry_persist_path
+    _home_registry_persist_path = None
+
+
+def create_home(display_name: str) -> dict:
+    if not _should_use_home_registry():
+        raise HomeRegistryError("Home registry feature not enabled")
+    name = display_name.strip()
+    if not name:
+        raise ValueError(
+            "Home display name is required and may not be blank/whitespace only"
+        )
+    # allow duplicate display names, but different IDs
+    home_id = str(uuid.uuid4())
+    home_project = HomeProject(home_id, name)
+    _home_registry[home_id] = home_project
+    _save_home_registry()
+    return home_project.to_dict()
+
+
+def list_homes() -> list[dict]:
+    if not _should_use_home_registry():
+        raise HomeRegistryError("Home registry feature not enabled")
+    # List is stable, sorted by display_name, ties allowed
+    return sorted(
+        (hp.to_dict() for hp in _home_registry.values()),
+        key=lambda d: d["display_name"].lower(),
+    )
+
+
+def rename_home(home_id: str, display_name: str) -> dict:
+    if not _should_use_home_registry():
+        raise HomeRegistryError("Home registry feature not enabled")
+    name = display_name.strip()
+    if not name:
+        raise ValueError(
+            "Home display name is required and may not be blank/whitespace only"
+        )
+    if home_id not in _home_registry:
+        raise HomeRegistryError(f"Unknown home_id {home_id}")
+    _home_registry[home_id].display_name = name
+    _save_home_registry()
+    return _home_registry[home_id].to_dict()
+
+
+def reset_home_registry() -> None:
+    _home_registry.clear()
+
+
+def _home_registry_persistence_enabled() -> bool:
+    return _home_registry_persist_path is not None
+
+
+# Registry in-memory and persistence mirror legacy store pattern.
+
+# If persistence for the legacy store is enabled, enable home-registry persistence too
+# (contract for test/migrations and for roundtrip).from app.board import resolve_sample_board
 from app.catalog import cheaper_in_room, get_product
 from app.events import SPEC_APPROVED, SPEC_SAVED, track
 from app.project import (
