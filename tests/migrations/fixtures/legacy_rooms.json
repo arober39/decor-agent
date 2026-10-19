@@ -1,0 +1,29 @@
+{
+  "projects": {
+    "ctx-1": {
+      "brief": {"lifestyle": "test-brief"},
+      "rooms": {
+        "living": {
+          "name": "Living Room",
+          "room_type": "living",
+          "existing_pieces": ["lamp"],
+          "style_notes": "modern",
+          "cart": [],
+          "approvals": {"concept": true}
+        },
+        "bedroom": {
+          "name": "Bedroom",
+          "room_type": "bedroom",
+          "existing_pieces": [],
+          "style_notes": "cozy",
+          "cart": [{"sku": "ABC", "qty": 1}],
+          "approvals": {"concept": false}
+        }
+      },
+      "board_pins": ["pin1", "pin2"],
+      "cart": [{"sku": "ABC", "qty": 1}],
+      "approvals": {"concept": true},
+      "context_key": "ctx-1"
+    }
+  }
+}

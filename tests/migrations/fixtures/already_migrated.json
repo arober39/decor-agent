@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "cx-2": {
+      "brief": {"lifestyle": "already-migrated"},
+      "rooms": {
+        "[\"cx-2\", \"living\"]": {"name": "Living Room", "room_type": "living", "home_id": "cx-2", "approvals": {"concept": true}},
+        "[\"cx-2\", \"bedroom\"]": {"name": "Bedroom", "room_type": "bedroom", "home_id": "cx-2", "approvals": {"concept": true}}
+      },
+      "board_pins": ["pin1", "pin2"],
+      "cart": [{"sku": "ABC", "qty": 1}],
+      "approvals": {"concept": true},
+      "context_key": "cx-2"
+    }
+  }
+}

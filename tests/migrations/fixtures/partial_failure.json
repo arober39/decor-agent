@@ -1,0 +1,20 @@
+{
+  "projects": {
+    "ctx-legacy": {
+      "brief": {"lifestyle": "legacy-user"},
+      "rooms": {
+        "kitchen": {"name": "Kitchen", "room_type": "kitchen", "approvals": {"concept": false}},
+        "hall": {"name": "Hall", "room_type": "other", "approvals": {"concept": false}}
+      },
+      "context_key": "ctx-legacy"
+    },
+    "ctx-migrated": {
+      "brief": {"lifestyle": "already-migrated"},
+      "rooms": {
+        "[\"ctx-migrated\", \"bath\"]": {"name": "Bath", "room_type": "bathroom", "home_id": "ctx-migrated", "approvals": {"concept": true}},
+        "[\"ctx-migrated\", \"study\"]": {"name": "Study", "room_type": "office", "home_id": "ctx-migrated", "approvals": {"concept": true}}
+      },
+      "context_key": "ctx-migrated"
+    }
+  }
+}
