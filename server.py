@@ -18,7 +18,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.flags import BOARD_INTAKE_FLAG, CART_HOLD_FLAG, build_context, get_flag, set_current_user_tier
+from app.flags import (
+    BOARD_INTAKE_FLAG,
+    CART_HOLD_FLAG,
+    SAVE_ROOM_PDF_FLAG,
+    build_context,
+    get_flag,
+    set_current_user_tier,
+)
 from app.events import REQUEST_ERROR, track
 from app.catalog import PRODUCTS
 from app.harness import run_agent_async
@@ -282,6 +289,7 @@ async def capabilities(context_key: str = "anonymous") -> dict:
     return {
         "board_intake": get_flag(BOARD_INTAKE_FLAG, context, default=True),
         "cart_hold": get_flag(CART_HOLD_FLAG, context, default=False),
+        "save_room_as_pdf": get_flag(SAVE_ROOM_PDF_FLAG, context, default=False),
         "sample_board": "living-linen",
     }
 

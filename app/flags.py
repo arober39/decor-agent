@@ -12,6 +12,7 @@ log = get_logger(__name__)
 
 BOARD_INTAKE_FLAG = "decor-board-intake"
 CART_HOLD_FLAG = "decor-cart-hold"
+SAVE_ROOM_PDF_FLAG = "save-room-as-pdf"
 FLINCH_POLICY_FLAG = "flinch-policy"
 FLINCH_POLICY_DEFAULT = {
     "mode": "live",

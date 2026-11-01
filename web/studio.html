@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;1,400&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/web/site.css?v=rooms" />
+    <link rel="stylesheet" href="/web/site.css?v=room-pdf" />
   </head>
   <body class="studio-page">
     <header class="nav">
@@ -31,6 +31,7 @@
         </form>
       </div>
       <div class="job-meta">
+        <button id="save-room-pdf" class="btn btn-ghost hidden" type="button">Save room as PDF</button>
         <p id="project-budget" class="budget">Budget not set</p>
         <div id="budget-meter" class="meter hidden"><span id="budget-fill"></span></div>
         <div id="project-over" class="budget-over hidden">
@@ -186,6 +187,8 @@
       </section>
     </div>
 
-    <script src="/web/studio.js?v=cart" defer></script>
+    <div id="room-plan-sheet" class="room-plan-sheet" aria-hidden="true"></div>
+    <script src="/web/room-pdf.js?v=room-pdf" defer></script>
+    <script src="/web/studio.js?v=room-pdf" defer></script>
   </body>
 </html>

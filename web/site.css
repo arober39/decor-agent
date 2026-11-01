@@ -1133,3 +1133,92 @@ input {
     flex: 1;
   }
 }
+
+.room-plan-sheet {
+  display: none;
+  color: #1b1410;
+  font-family: "Inter Tight", "Helvetica Neue", sans-serif;
+}
+
+.room-plan-sheet h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.room-plan-sheet h2 {
+  margin: 22px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.room-plan-sheet p {
+  margin: 0 0 6px;
+}
+
+.room-plan-sheet table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.room-plan-sheet th,
+.room-plan-sheet td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid rgba(17, 17, 17, 0.12);
+  font-size: 13px;
+}
+
+.room-plan-sheet th:last-child,
+.room-plan-sheet td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.room-plan-sheet .plan-mark {
+  margin: 0;
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+  font-size: 12px;
+}
+
+.room-plan-sheet .plan-kicker,
+.room-plan-sheet .plan-sub,
+.room-plan-sheet .plan-meta,
+.room-plan-sheet .plan-why,
+.room-plan-sheet .plan-foot {
+  color: #5c574f;
+}
+
+.room-plan-sheet .plan-kicker {
+  margin-top: 14px;
+}
+
+.room-plan-sheet .plan-why {
+  margin-top: 4px;
+}
+
+.room-plan-sheet .plan-foot {
+  margin-top: 28px;
+  font-size: 12px;
+}
+
+@media print {
+  body.printing-room {
+    background: #fff;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body.printing-room > *:not(.room-plan-sheet) {
+    display: none !important;
+  }
+
+  body.printing-room .room-plan-sheet {
+    display: block !important;
+  }
+}
