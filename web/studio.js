@@ -52,6 +52,7 @@ function readRoomKey() {
 let contextKey = readRoomKey();
 let selectedPin = "";
 let transcriptReady = false;
+let currentProject = null;
 
 function boardMappedKey() {
   return `${BOARD_MAPPED_PREFIX}${contextKey}`;
@@ -202,6 +203,7 @@ function renderBoard(project) {
 
 function renderProject(project) {
   if (!project) return;
+  currentProject = project;
   document.getElementById("project-status").textContent = prettyStatus(project.status);
   const rooms = Object.values(project.rooms || {});
   document.getElementById("project-room").textContent = rooms[0]?.name || "No room yet";
@@ -381,6 +383,7 @@ async function loadCapabilities() {
     boardBtn.classList.toggle("hidden", !caps.board_intake);
     document.getElementById("start-board")?.classList.toggle("hidden", !caps.board_intake);
     document.getElementById("cart-section")?.classList.toggle("hidden", !caps.cart_hold);
+    document.getElementById("save-room-pdf")?.classList.toggle("hidden", !caps.save_room_as_pdf);
     if (caps.cart_hold) loadCartShelf();
   } catch {
     boardBtn.classList.remove("hidden");
@@ -494,6 +497,47 @@ async function sendChat(message) {
     promptInput.focus();
   }
 }
+
+function saveRoomAsPdf(project) {
+  const sheet = document.getElementById("room-plan-sheet");
+  if (!sheet || typeof roomPlanBody !== "function") {
+    appendMessage("bot", "Saving a room as a PDF is unavailable right now.");
+    return;
+  }
+  const previousTitle = document.title;
+  const rooms = Object.values((project || {}).rooms || {});
+  const roomName = rooms[0]?.name || "Room plan";
+  document.title = `${roomName} · Decora`;
+  let html = "";
+  try {
+    html = roomPlanBody(project || {});
+  } catch (error) {
+    document.title = previousTitle;
+    appendMessage("bot", "Could not prepare this room for PDF.");
+    return;
+  }
+  sheet.innerHTML = html;
+  document.body.classList.add("printing-room");
+  const cleanup = () => {
+    document.body.classList.remove("printing-room");
+    sheet.innerHTML = "";
+    document.title = previousTitle;
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  try {
+    window.print();
+  } catch (error) {
+    cleanup();
+    appendMessage("bot", "Could not open the print dialog for this room.");
+  }
+}
+
+document.getElementById("save-room-pdf")?.addEventListener("click", () => {
+  const button = document.getElementById("save-room-pdf");
+  if (!button || button.classList.contains("hidden")) return;
+  saveRoomAsPdf(currentProject);
+});
 
 syncRoomUrl(contextKey, true);
 loadCapabilities();
